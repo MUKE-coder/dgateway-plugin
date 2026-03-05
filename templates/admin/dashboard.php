@@ -1,0 +1,72 @@
+<?php defined('ABSPATH') || exit; ?>
+<div class="wrap dgw-admin-wrap">
+    <h1><?php esc_html_e('DGateway Dashboard', 'dgateway'); ?></h1>
+
+    <?php
+    $api_key = get_option('dgw_api_key', '');
+    if (empty($api_key)) : ?>
+        <div class="dgw-notice dgw-notice--info">
+            <?php printf(
+                __('Welcome to DGateway! Please <a href="%s">configure your API key</a> to get started.', 'dgateway'),
+                esc_url(admin_url('admin.php?page=dgateway-settings'))
+            ); ?>
+        </div>
+    <?php else : ?>
+
+        <!-- Wallet Balances -->
+        <h2><?php esc_html_e('Wallet Balances', 'dgateway'); ?></h2>
+        <div class="dgw-cards" id="dgw-wallet-cards">
+            <div class="dgw-loading"><span class="dgw-spinner"></span> Loading balances...</div>
+        </div>
+
+        <!-- Recent Transactions -->
+        <div class="dgw-table-wrap">
+            <div class="dgw-table-header">
+                <h2><?php esc_html_e('Recent Transactions', 'dgateway'); ?></h2>
+                <a href="<?php echo esc_url(admin_url('admin.php?page=dgateway-transactions')); ?>" class="button button-small">
+                    <?php esc_html_e('View All', 'dgateway'); ?>
+                </a>
+            </div>
+            <div id="dgw-recent-transactions">
+                <div class="dgw-loading"><span class="dgw-spinner"></span> Loading transactions...</div>
+            </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="dgw-cards" style="margin-top:24px;">
+            <div class="dgw-card">
+                <div class="dgw-card-label"><?php esc_html_e('Shortcodes', 'dgateway'); ?></div>
+                <p style="font-size:13px;color:#555;margin:8px 0 0;">
+                    <code>[dgw_pay_button amount="5000"]</code><br>
+                    <code>[dgw_donation_form]</code><br>
+                    <code>[dgw_product_card name="..." price="..."]</code>
+                </p>
+            </div>
+            <div class="dgw-card">
+                <div class="dgw-card-label"><?php esc_html_e('Webhook URL', 'dgateway'); ?></div>
+                <p style="font-size:13px;margin:8px 0 0;">
+                    <code style="word-break:break-all;"><?php echo esc_url(rest_url('dgateway/v1/webhook')); ?></code>
+                </p>
+            </div>
+            <div class="dgw-card">
+                <div class="dgw-card-label"><?php esc_html_e('Mode', 'dgateway'); ?></div>
+                <p style="margin:8px 0 0;">
+                    <?php
+                    if (strpos($api_key, 'dgw_test') === 0) {
+                        echo '<span class="dgw-badge dgw-badge-warning">TEST</span>';
+                    } elseif (strpos($api_key, 'dgw_live') === 0) {
+                        echo '<span class="dgw-badge dgw-badge-success">LIVE</span>';
+                    } else {
+                        echo '<span class="dgw-badge">Unknown</span>';
+                    }
+                    ?>
+                </p>
+            </div>
+        </div>
+
+        <script>
+            jQuery(function() { if (typeof dgwLoadDashboard === 'function') dgwLoadDashboard(); });
+        </script>
+
+    <?php endif; ?>
+</div>
