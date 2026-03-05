@@ -102,7 +102,10 @@
 
             // Header.
             var title = cfg._isSubscribe ? 'Subscribe' : 'Payment';
+            var logoUrl = (typeof dgwCheckout !== 'undefined' && dgwCheckout.logoUrl) ? dgwCheckout.logoUrl : '';
+            var logoHtml = logoUrl ? '<img src="' + logoUrl + '" alt="DGateway" class="dgw-modal-logo" />' : '';
             var header = '<div class="dgw-modal-header">' +
+                logoHtml +
                 '<div class="dgw-modal-title">' + title + '</div>' +
                 '<button class="dgw-modal-close" type="button">&times;</button>' +
                 '</div>';

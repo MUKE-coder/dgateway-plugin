@@ -94,10 +94,11 @@ class DGW_Plugin {
             true
         );
 
-        // Localize with REST URL and nonce.
+        // Localize with REST URL, nonce, and logo.
         wp_localize_script('dgw-checkout', 'dgwCheckout', [
             'restUrl' => esc_url_raw(rest_url('dgateway/v1/')),
             'nonce'   => wp_create_nonce('wp_rest'),
+            'logoUrl' => esc_url(DGW_PLUGIN_URL . 'assets/images/logo.png'),
         ]);
     }
 

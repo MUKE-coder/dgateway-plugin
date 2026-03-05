@@ -1,6 +1,9 @@
 <?php defined('ABSPATH') || exit; ?>
 <div class="wrap dgw-admin-wrap">
-    <h1><?php esc_html_e('Transactions', 'dgateway'); ?></h1>
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+        <img src="<?php echo esc_url(DGW_PLUGIN_URL . 'assets/images/logo.png'); ?>" alt="DGateway" style="height:36px; width:auto;" />
+        <h1 style="margin:0;"><?php esc_html_e('Transactions', 'dgateway'); ?></h1>
+    </div>
 
     <div class="dgw-table-wrap">
         <!-- Filters -->

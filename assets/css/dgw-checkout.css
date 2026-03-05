@@ -53,9 +53,19 @@
 
 .dgw-modal-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
     padding: 20px 24px 0;
+    gap: 10px;
+}
+
+.dgw-modal-logo {
+    height: 32px;
+    width: auto;
+    object-fit: contain;
+}
+
+.dgw-modal-close {
+    margin-left: auto;
 }
 
 .dgw-modal-title {
