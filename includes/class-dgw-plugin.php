@@ -109,7 +109,7 @@ class DGW_Plugin {
         static $client = null;
         if (null === $client) {
             $client = new DGW_API_Client(
-                get_option('dgw_api_url', 'https://dgateway.desispay.com'),
+                get_option('dgw_api_url', 'https://dgatewayapi.desispay.com'),
                 get_option('dgw_api_key', '')
             );
         }

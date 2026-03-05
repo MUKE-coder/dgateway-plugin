@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: DGateway Payment Gateway
- * Plugin URI: https://dgateway.desispay.com
+ * Plugin URI: https://dgatewayapi.desispay.com
  * Description: Accept Mobile Money and Card payments via DGateway. Works standalone or with WooCommerce.
  * Version: 1.0.0
  * Author: DesisPay
@@ -48,7 +48,7 @@ spl_autoload_register(function ($class) {
  * Activation hook — set default options.
  */
 function dgw_activate() {
-    add_option('dgw_api_url', 'https://dgateway.desispay.com');
+    add_option('dgw_api_url', 'https://dgatewayapi.desispay.com');
     add_option('dgw_api_key', '');
     add_option('dgw_default_currency', 'UGX');
     add_option('dgw_webhook_secret', wp_generate_password(32, false));

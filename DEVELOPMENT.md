@@ -49,7 +49,7 @@
 4. **Configure the plugin**
 
    Go to DGateway → Settings and enter:
-   - API URL: `https://dgateway.desispay.com` (or your local DGateway API URL)
+   - API URL: `https://dgatewayapi.desispay.com` (or your local DGateway API URL)
    - API Key: Your app's API key from the DGateway dashboard
    - Default Currency: `UGX` (or your preferred currency)
 
@@ -150,7 +150,7 @@ If WooCommerce is active, also check: WooCommerce → Status → Logs → "dgate
    ```php
    /**
     * Plugin Name: DGateway Payment Gateway
-    * Plugin URI: https://dgateway.desispay.com
+    * Plugin URI: https://dgatewayapi.desispay.com
     * Description: Accept Mobile Money and Card payments via DGateway.
     * Version: 1.0.0
     * Author: DesisPay
@@ -247,7 +247,7 @@ If WooCommerce is active, also check: WooCommerce → Status → Logs → "dgate
    What to include:
    - Plugin name: DGateway Payment Gateway
    - Plugin slug: dgateway
-   - Plugin URL: https://dgateway.desispay.com
+   - Plugin URL: https://dgatewayapi.desispay.com
    - A brief description of what the plugin does
 
 3. **Wait for review**

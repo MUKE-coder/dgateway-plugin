@@ -13,7 +13,7 @@
                 <th scope="row"><label for="dgw_api_url"><?php esc_html_e('API URL', 'dgateway'); ?></label></th>
                 <td>
                     <input type="url" id="dgw_api_url" name="dgw_api_url"
-                           value="<?php echo esc_attr(get_option('dgw_api_url', 'https://dgateway.desispay.com')); ?>"
+                           value="<?php echo esc_attr(get_option('dgw_api_url', 'https://dgatewayapi.desispay.com')); ?>"
                            class="regular-text" />
                     <p class="description"><?php esc_html_e('DGateway API base URL.', 'dgateway'); ?></p>
                 </td>

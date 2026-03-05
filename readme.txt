@@ -50,7 +50,7 @@ No. DGateway works standalone with shortcodes. WooCommerce integration is option
 
 = How do I get an API key? =
 
-Sign up at [dgateway.desispay.com](https://dgateway.desispay.com), create an app, and generate an API key.
+Sign up at [dgatewayapi.desispay.com](https://dgatewayapi.desispay.com), create an app, and generate an API key.
 
 = What payment methods are supported? =
 
