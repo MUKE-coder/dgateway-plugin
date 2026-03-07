@@ -40,7 +40,10 @@ spl_autoload_register(function ($class) {
     ];
 
     if (isset($map[$class])) {
-        require_once DGW_PLUGIN_DIR . $map[$class];
+        $file = DGW_PLUGIN_DIR . $map[$class];
+        if (file_exists($file)) {
+            require_once $file;
+        }
     }
 });
 
@@ -67,6 +70,12 @@ register_deactivation_hook(__FILE__, 'dgw_deactivate');
  * Boot the plugin.
  */
 function dgw_init() {
+    if (!class_exists('DGW_Plugin')) {
+        add_action('admin_notices', function () {
+            echo '<div class="notice notice-error"><p><strong>DGateway:</strong> Plugin files are incomplete. Please re-install the plugin.</p></div>';
+        });
+        return;
+    }
     DGW_Plugin::instance();
 }
 add_action('plugins_loaded', 'dgw_init');
