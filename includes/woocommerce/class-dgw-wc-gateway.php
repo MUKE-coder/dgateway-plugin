@@ -29,6 +29,9 @@ class DGW_WC_Gateway extends \WC_Payment_Gateway {
 
         // Enqueue checkout scripts.
         add_action('wp_enqueue_scripts', [$this, 'enqueue_checkout_scripts']);
+
+        // Polling UI on the thank-you page for pending MoMo payments.
+        add_action('woocommerce_thankyou_dgateway', [$this, 'thankyou_polling_ui']);
     }
 
     /* ------------------------------------------------------------------ */
@@ -322,22 +325,25 @@ JS;
             $reference
         ));
 
-        // Build response for JS interception.
-        $response = [
-            'result'        => 'success',
-            'redirect'      => $this->get_return_url($order),
-            'dgw_reference' => $reference,
-            'dgw_amount'    => $amount,
-            'dgw_currency'  => $currency,
-        ];
-
         // For Stripe, include client_secret so JS can mount Elements.
         if ($provider === 'stripe') {
-            $response['dgw_client_secret'] = $data['client_secret'] ?? '';
-            $response['dgw_stripe_key']    = $data['stripe_publishable_key'] ?? '';
+            return [
+                'result'           => 'success',
+                'redirect'         => $this->get_return_url($order),
+                'dgw_reference'    => $reference,
+                'dgw_amount'       => $amount,
+                'dgw_currency'     => $currency,
+                'dgw_client_secret' => $data['client_secret'] ?? '',
+                'dgw_stripe_key'    => $data['stripe_publishable_key'] ?? '',
+            ];
         }
 
-        return $response;
+        // MoMo: redirect to thank-you page normally.
+        // The polling UI is rendered via the woocommerce_thankyou_dgateway hook.
+        return [
+            'result'   => 'success',
+            'redirect' => $this->get_return_url($order),
+        ];
     }
 
     /**
@@ -354,6 +360,97 @@ JS;
             }
         }
         return 0;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  Thank-you Page Polling UI                                          */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Render a polling UI on the thank-you page for pending MoMo payments.
+     * Automatically checks payment status and refreshes once confirmed.
+     */
+    public function thankyou_polling_ui($order_id) {
+        $order = wc_get_order($order_id);
+        if (!$order || $order->is_paid()) {
+            return;
+        }
+
+        $reference = $order->get_meta('_dgw_reference');
+        if (empty($reference)) {
+            return;
+        }
+
+        wp_enqueue_script('dgw-checkout');
+        ?>
+        <div id="dgw-payment-polling" style="background:#f8f9fa;border:2px solid #e2e8f0;border-radius:12px;padding:32px;text-align:center;margin:24px 0;">
+            <div id="dgw-polling-spinner" style="margin:0 auto 16px;width:48px;height:48px;border:4px solid #e2e8f0;border-top:4px solid #4f46e5;border-radius:50%;animation:dgwSpin 1s linear infinite;"></div>
+            <h3 id="dgw-polling-title" style="margin:0 0 8px;font-size:18px;color:#1a202c;">Waiting for payment confirmation...</h3>
+            <p id="dgw-polling-message" style="margin:0 0 16px;color:#718096;font-size:14px;">Please check your phone and approve the Mobile Money payment.</p>
+            <p id="dgw-polling-status" style="margin:0;color:#a0aec0;font-size:13px;">Checking payment status...</p>
+        </div>
+        <style>
+            @keyframes dgwSpin { to { transform: rotate(360deg); } }
+        </style>
+        <script>
+        (function() {
+            var ref = <?php echo wp_json_encode($reference); ?>;
+            var attempts = 0;
+            var maxAttempts = 60;
+            var interval = 5000;
+            var statusEl = document.getElementById('dgw-polling-status');
+
+            function poll() {
+                if (attempts >= maxAttempts) {
+                    document.getElementById('dgw-polling-spinner').style.display = 'none';
+                    document.getElementById('dgw-polling-title').textContent = 'Payment verification timed out';
+                    document.getElementById('dgw-polling-title').style.color = '#e53e3e';
+                    document.getElementById('dgw-polling-message').textContent = 'Your payment may still be processing. Please refresh the page or check your order status.';
+                    statusEl.textContent = '';
+                    return;
+                }
+                attempts++;
+                statusEl.textContent = 'Attempt ' + attempts + ' of ' + maxAttempts + '...';
+
+                fetch(<?php echo wp_json_encode(esc_url_raw(rest_url('dgateway/v1/verify'))); ?>, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': <?php echo wp_json_encode(wp_create_nonce('wp_rest')); ?>
+                    },
+                    body: JSON.stringify({ reference: ref })
+                })
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    var status = (data.data && data.data.status) || '';
+                    if (status === 'completed') {
+                        document.getElementById('dgw-polling-spinner').style.borderTopColor = '#38a169';
+                        document.getElementById('dgw-polling-title').textContent = 'Payment confirmed!';
+                        document.getElementById('dgw-polling-title').style.color = '#38a169';
+                        document.getElementById('dgw-polling-message').textContent = 'Refreshing page...';
+                        statusEl.textContent = '';
+                        setTimeout(function() { window.location.reload(); }, 2000);
+                        return;
+                    }
+                    if (status === 'failed') {
+                        document.getElementById('dgw-polling-spinner').style.display = 'none';
+                        document.getElementById('dgw-polling-title').textContent = 'Payment failed';
+                        document.getElementById('dgw-polling-title').style.color = '#e53e3e';
+                        document.getElementById('dgw-polling-message').textContent = 'The payment was not completed. Please try again.';
+                        statusEl.textContent = '';
+                        return;
+                    }
+                    setTimeout(poll, interval);
+                })
+                .catch(function() {
+                    setTimeout(poll, interval);
+                });
+            }
+
+            setTimeout(poll, 3000);
+        })();
+        </script>
+        <?php
     }
 
     /**

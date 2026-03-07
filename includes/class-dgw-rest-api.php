@@ -66,7 +66,7 @@ class DGW_REST_API {
             $args['provider'] = $provider;
         }
         if (is_array($metadata)) {
-            $args['metadata'] = $metadata;
+            $args['metadata'] = empty($metadata) ? new \stdClass() : (object) $metadata;
         }
 
         $api    = DGW_Plugin::api();
@@ -107,7 +107,41 @@ class DGW_REST_API {
             ], 400);
         }
 
+        // Sync status to WooCommerce order if applicable.
+        $status = $result['data']['status'] ?? '';
+        if (($status === 'completed' || $status === 'failed') && class_exists('WooCommerce')) {
+            $this->sync_wc_order_status($reference, $status);
+        }
+
         return new \WP_REST_Response($result, 200);
+    }
+
+    /**
+     * Update WooCommerce order status when a verify poll detects a status change.
+     */
+    private function sync_wc_order_status(string $reference, string $status) {
+        $orders = wc_get_orders([
+            'meta_key'   => '_dgw_reference',
+            'meta_value' => $reference,
+            'limit'      => 1,
+        ]);
+
+        if (empty($orders)) {
+            return;
+        }
+
+        $order = $orders[0];
+
+        if ($status === 'completed' && !$order->is_paid()) {
+            $order->payment_complete($reference);
+            $order->add_order_note(
+                sprintf(__('DGateway payment confirmed via status check. Reference: %s', 'dgateway'), $reference)
+            );
+        } elseif ($status === 'failed' && $order->get_status() !== 'failed') {
+            $order->update_status('failed',
+                sprintf(__('DGateway payment failed. Reference: %s', 'dgateway'), $reference)
+            );
+        }
     }
 
     /* ------------------------------------------------------------------ */
