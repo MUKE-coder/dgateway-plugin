@@ -37,6 +37,7 @@ spl_autoload_register(function ($class) {
         'DGW_Admin'           => 'includes/class-dgw-admin.php',
         'DGW_WC_Gateway'                 => 'includes/woocommerce/class-dgw-wc-gateway.php',
         'DGW_WC_Subscription_Product'    => 'includes/woocommerce/class-dgw-wc-subscription-product.php',
+        'DGW_WC_Blocks_Integration'      => 'includes/woocommerce/class-dgw-wc-blocks-integration.php',
     ];
 
     if (isset($map[$class])) {
@@ -45,6 +46,45 @@ spl_autoload_register(function ($class) {
             require_once $file;
         }
     }
+});
+
+/**
+ * Declare WooCommerce features compatibility (HPOS + Cart/Checkout Blocks).
+ * Must run before WooCommerce initialises, so we hook at the top level.
+ */
+add_action('before_woocommerce_init', function () {
+    if (class_exists('\Automattic\WooCommerce\Utilities\FeaturesUtil')) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
+            'cart_checkout_blocks',
+            DGW_PLUGIN_DIR . 'dgateway.php',
+            true
+        );
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
+            'custom_order_tables',
+            DGW_PLUGIN_DIR . 'dgateway.php',
+            true
+        );
+    }
+});
+
+/**
+ * Register DGateway as a block-based checkout payment method.
+ * woocommerce_blocks_loaded fires on plugins_loaded (priority 5 in WC Blocks),
+ * so we hook at the top level to guarantee we're registered in time.
+ */
+add_action('woocommerce_blocks_loaded', function () {
+    if (!class_exists('Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType')) {
+        return;
+    }
+    if (!class_exists('WooCommerce')) {
+        return;
+    }
+    add_action(
+        'woocommerce_blocks_payment_method_type_registration',
+        function ($registry) {
+            $registry->register(new DGW_WC_Blocks_Integration());
+        }
+    );
 });
 
 /**
