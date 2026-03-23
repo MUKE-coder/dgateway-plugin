@@ -59,7 +59,7 @@
 
 ```
 1. Create a new Page in WordPress
-2. Add this shortcode: [dgw_payment_button amount="1000" currency="UGX" description="Test Payment"]
+2. Add this shortcode: [dgw_pay_button amount="1000" currency="UGX" description="Test Payment"]
 3. View the page on the frontend
 4. Click the "Pay Now" button
 5. Enter a valid phone number (e.g., 256771234567)
@@ -209,7 +209,7 @@ If WooCommerce is active, also check: WooCommerce → Status → Logs → "dgate
 
    = What payment providers are supported? =
    Iotec (MTN/Airtel Mobile Money), Relworx (Mobile Money),
-   PesaPal (Mobile Money + Cards), and Stripe (International Cards).
+   and Stripe (International Cards).
 
    = How do subscriptions work? =
    DGateway uses a "scheduled invoice" model. When payment is due,

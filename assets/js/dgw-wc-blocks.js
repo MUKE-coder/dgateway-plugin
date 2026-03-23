@@ -1,171 +1,145 @@
 /**
  * DGateway WooCommerce Blocks payment method registration.
- * Uses vanilla JS with WP/WC globals — no build step required.
  */
 (function () {
     'use strict';
 
-    if (!window.wc || !window.wc.blocksRegistry) return;
-    if (!window.wp || !window.wp.element) return;
+    var wc = window.wc || {};
+    var wp = window.wp || {};
 
-    var blocksRegistry  = window.wc.blocksRegistry;
-    var wcSettings      = window.wc.wcSettings;
-    var wpElement       = window.wp.element;
-    var wpHtmlEntities  = window.wp.htmlEntities;
+    var registerPaymentMethod = wc.wcBlocksRegistry && wc.wcBlocksRegistry.registerPaymentMethod;
+    var createElement = wp.element && wp.element.createElement;
+    var useState = wp.element && wp.element.useState;
+    var useEffect = wp.element && wp.element.useEffect;
+    var getSetting = wc.wcSettings && wc.wcSettings.getSetting;
 
-    var createElement   = wpElement.createElement;
-    var useState        = wpElement.useState;
-    var useEffect       = wpElement.useEffect;
-    var decodeEntities  = wpHtmlEntities.decodeEntities;
-
-    var settings    = wcSettings.getSetting('dgateway_data', {});
-    var label       = decodeEntities(settings.title || 'DGateway Payment');
-    var description = decodeEntities(settings.description || '');
-
-    /* ------------------------------------------------------------------ */
-    /* Tab button style helper                                              */
-    /* ------------------------------------------------------------------ */
-    function tabStyle(active) {
-        return {
-            flex: 1,
-            padding: '10px',
-            border: '2px solid ' + (active ? '#4f46e5' : '#e0e0e0'),
-            borderRadius: '8px',
-            background: active ? '#eef2ff' : '#fff',
-            cursor: 'pointer',
-            fontSize: '13px',
-            fontWeight: 600,
-            color: active ? '#4f46e5' : 'inherit',
-            transition: 'all 0.15s',
-        };
+    if (!registerPaymentMethod || !createElement) {
+        console.error('[DGateway] Missing globals - registerPaymentMethod:', !!registerPaymentMethod, 'createElement:', !!createElement);
+        return;
     }
 
+    var settings = getSetting ? (getSetting('dgateway_data', null) || getSetting('dgateway', {})) : {};
+    var title = (settings && settings.title) || 'DGateway Payment';
+    var desc  = (settings && settings.description) || 'Pay with Mobile Money or Card';
+
     /* ------------------------------------------------------------------ */
-    /* Payment form component                                               */
+    /* Styles                                                               */
     /* ------------------------------------------------------------------ */
-    function DGatewayContent(props) {
-        var eventRegistration = props.eventRegistration;
-        var emitResponse      = props.emitResponse;
+    var styles = {
+        tabWrap: { display: 'flex', gap: '10px', marginBottom: '16px' },
+        tabActive: {
+            flex: 1, padding: '12px 16px', border: 'none', borderRadius: '10px',
+            background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', cursor: 'pointer',
+            fontSize: '14px', fontWeight: 700, color: '#fff',
+            boxShadow: '0 4px 14px rgba(79,70,229,0.35)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+        },
+        tabInactive: {
+            flex: 1, padding: '12px 16px', border: '2px solid #e5e7eb', borderRadius: '10px',
+            background: '#f9fafb', cursor: 'pointer', fontSize: '14px', fontWeight: 600,
+            color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+        },
+        fieldWrap: { background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' },
+        label: {
+            display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px',
+            fontWeight: 700, fontSize: '13px', color: '#374151', textTransform: 'uppercase',
+        },
+        input: {
+            width: '100%', padding: '12px 14px', border: '2px solid #e5e7eb', borderRadius: '8px',
+            fontSize: '15px', color: '#111827', background: '#fff', outline: 'none', boxSizing: 'border-box',
+        },
+        hint: { marginTop: '8px', fontSize: '12px', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '4px' },
+        cardNotice: {
+            background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px',
+            padding: '14px 16px', color: '#0369a1', fontSize: '13px', lineHeight: '1.6',
+            display: 'flex', alignItems: 'flex-start', gap: '10px',
+        },
+    };
 
-        var payMethodState = useState('momo');
-        var payMethod      = payMethodState[0];
-        var setPayMethod   = payMethodState[1];
+    /* ------------------------------------------------------------------ */
+    /* Content component                                                    */
+    /* ------------------------------------------------------------------ */
+    function Content(props) {
+        var evtReg = (props && props.eventRegistration) || {};
+        var emitResp = (props && props.emitResponse) || {};
 
-        var phoneState = useState('');
-        var phone      = phoneState[0];
-        var setPhone   = phoneState[1];
+        var s1 = useState('momo');
+        var payMethod = s1[0], setPayMethod = s1[1];
+        var s2 = useState('');
+        var phone = s2[0], setPhone = s2[1];
 
-        useEffect(function () {
-            var unsubscribe = eventRegistration.onPaymentProcessing(function () {
-                if (payMethod === 'momo' && (!phone || phone.length < 9)) {
+        if (useEffect) {
+            useEffect(function () {
+                if (!evtReg.onPaymentProcessing) return;
+                var unsub = evtReg.onPaymentProcessing(function () {
+                    if (payMethod === 'momo' && (!phone || phone.length < 9)) {
+                        return {
+                            type: emitResp.responseTypes.ERROR,
+                            message: 'Please enter a valid phone number for Mobile Money payment.',
+                        };
+                    }
                     return {
-                        type: emitResponse.responseTypes.ERROR,
-                        message: 'Please enter a valid phone number for Mobile Money payment.',
+                        type: emitResp.responseTypes.SUCCESS,
+                        meta: {
+                            paymentMethodData: {
+                                dgw_payment_method: payMethod,
+                                dgw_phone: phone,
+                            },
+                        },
                     };
-                }
-                return {
-                    type: emitResponse.responseTypes.SUCCESS,
-                    meta: {
-                        paymentMethodData: {
-                            dgw_payment_method: payMethod,
-                            dgw_phone: phone,
-                        },
-                    },
-                };
-            });
-            return unsubscribe;
-        }, [payMethod, phone, eventRegistration.onPaymentProcessing, emitResponse.responseTypes]);
+                });
+                return unsub;
+            }, [payMethod, phone]);
+        }
 
-        return createElement(
-            'div',
-            { id: 'dgw-wc-payment-fields' },
-
-            /* Description */
-            description
-                ? createElement('p', { style: { marginBottom: '12px', color: '#555' } }, description)
-                : null,
-
-            /* Tab bar */
-            createElement(
-                'div',
-                { style: { display: 'flex', gap: '8px', marginBottom: '16px' } },
-                createElement(
-                    'button',
-                    {
-                        type: 'button',
-                        style: tabStyle(payMethod === 'momo'),
-                        onClick: function () { setPayMethod('momo'); },
-                    },
-                    '\uD83D\uDCF1 Mobile Money'
-                ),
-                createElement(
-                    'button',
-                    {
-                        type: 'button',
-                        style: tabStyle(payMethod === 'card'),
-                        onClick: function () { setPayMethod('card'); },
-                    },
-                    '\uD83D\uDCB3 Card'
-                )
+        return createElement('div', { style: { fontFamily: 'inherit' } },
+            desc ? createElement('p', { style: { margin: '0 0 16px', color: '#6b7280', fontSize: '13px' } }, desc) : null,
+            createElement('div', { style: styles.tabWrap },
+                createElement('button', {
+                    type: 'button',
+                    style: payMethod === 'momo' ? styles.tabActive : styles.tabInactive,
+                    onClick: function () { setPayMethod('momo'); },
+                }, '\uD83D\uDCF1 Mobile Money'),
+                createElement('button', {
+                    type: 'button',
+                    style: payMethod === 'card' ? styles.tabActive : styles.tabInactive,
+                    onClick: function () { setPayMethod('card'); },
+                }, '\uD83D\uDCB3 Card Payment')
             ),
-
-            /* Mobile Money fields */
             payMethod === 'momo'
-                ? createElement(
-                    'div',
-                    null,
-                    createElement(
-                        'label',
-                        {
-                            htmlFor: 'dgw_phone_blocks',
-                            style: { display: 'block', marginBottom: '4px', fontWeight: 600, fontSize: '13px' },
-                        },
-                        'Phone Number'
-                    ),
+                ? createElement('div', { style: styles.fieldWrap },
+                    createElement('label', { htmlFor: 'dgw_phone_blocks', style: styles.label }, '\uD83D\uDCDE Phone Number'),
                     createElement('input', {
-                        type: 'tel',
-                        id: 'dgw_phone_blocks',
-                        className: 'input-text',
-                        placeholder: 'e.g. 256771234567',
-                        value: phone,
-                        onChange: function (e) { setPhone(e.target.value); },
-                        style: { width: '100%', marginBottom: '4px' },
+                        type: 'tel', id: 'dgw_phone_blocks', placeholder: 'e.g. 256771234567',
+                        value: phone, onChange: function (e) { setPhone(e.target.value); }, style: styles.input,
                     }),
-                    createElement(
-                        'small',
-                        { style: { color: '#888', display: 'block', marginTop: '4px' } },
-                        'Enter with country code (e.g. 256 for Uganda)'
-                    )
+                    createElement('p', { style: styles.hint }, '\u2139\uFE0F Include country code — e.g. 256771234567 for Uganda')
                 )
                 : null,
-
-            /* Card notice */
             payMethod === 'card'
-                ? createElement(
-                    'p',
-                    { style: { color: '#555', fontSize: '13px' } },
-                    'You will be prompted to enter your card details after placing the order.'
+                ? createElement('div', { style: styles.cardNotice },
+                    createElement('span', { style: { fontSize: '20px' } }, '\uD83D\uDD12'),
+                    createElement('span', null, 'Your card details will be collected securely on the next step after placing your order.')
                 )
                 : null
         );
     }
 
     /* ------------------------------------------------------------------ */
-    /* Register the payment method                                          */
+    /* Register                                                             */
     /* ------------------------------------------------------------------ */
-    blocksRegistry.registerPaymentMethod({
-        name: 'dgateway',
-        label: label,
-        content: createElement(DGatewayContent, null),
-        edit: createElement(
-            'div',
-            { style: { padding: '12px', border: '1px solid #e0e0e0', borderRadius: '8px', fontSize: '13px' } },
-            label + ' — Mobile Money & Card'
-        ),
-        canMakePayment: function () { return true; },
-        ariaLabel: label,
-        supports: {
-            features: settings.supports || ['products'],
-        },
-    });
+    try {
+        registerPaymentMethod({
+            name: 'dgateway',
+            label: createElement('span', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, '\uD83D\uDCB3', title),
+            content: createElement(Content),
+            edit: createElement('div', null, title),
+            canMakePayment: function () { return true; },
+            ariaLabel: title,
+            supports: { features: settings.supports || ['products'] },
+        });
+        console.log('[DGateway] Payment method registered OK');
+    } catch (e) {
+        console.error('[DGateway] Registration error:', e);
+    }
 })();

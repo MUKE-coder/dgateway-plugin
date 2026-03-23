@@ -39,10 +39,15 @@
         <div class="dgw-cards" style="margin-top:24px;">
             <div class="dgw-card">
                 <div class="dgw-card-label"><?php esc_html_e('Shortcodes', 'dgateway'); ?></div>
-                <p style="font-size:13px;color:#555;margin:8px 0 0;">
-                    <code>[dgw_pay_button amount="5000"]</code><br>
-                    <code>[dgw_donation_form]</code><br>
-                    <code>[dgw_product_card name="..." price="..."]</code>
+                <p style="font-size:12px;color:#555;margin:8px 0 0;line-height:2;">
+                    <strong>Pay Button</strong><br>
+                    <code>[dgw_pay_button amount="5000" currency="UGX" description="Premium Access" label="Pay Now"]</code><br>
+                    <strong>Donation Form</strong><br>
+                    <code>[dgw_donation_form amounts="5000,10000,50000" title="Support Us" collect_name="yes" collect_email="yes"]</code><br>
+                    <strong>Product Card</strong><br>
+                    <code>[dgw_product_card name="T-Shirt" price="25000" currency="UGX" description="Official merch" image="https://..." button_label="Buy Now"]</code><br>
+                    <strong>Subscribe Button</strong><br>
+                    <code>[dgw_subscribe_button plan_id="1" label="Subscribe Monthly"]</code>
                 </p>
             </div>
             <div class="dgw-card">
