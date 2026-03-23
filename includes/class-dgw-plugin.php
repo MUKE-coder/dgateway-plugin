@@ -35,7 +35,8 @@ class DGW_Plugin {
         new DGW_Webhook_Handler();
 
         // WooCommerce gateway (only if WC active).
-        add_action('plugins_loaded', [$this, 'init_woocommerce'], 20);
+        // Called directly — WC is already loaded because we boot at plugins_loaded.
+        $this->init_woocommerce();
 
         // Frontend scripts.
         add_action('wp_enqueue_scripts', [$this, 'enqueue_scripts']);
