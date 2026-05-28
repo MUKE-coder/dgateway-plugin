@@ -55,28 +55,67 @@
         /*  Poll Status                                                   */
         /* ------------------------------------------------------------ */
 
+        // Default cadence mirrors the DGateway dashboard waiting screen:
+        // 6 polls over a 120s window with intervals 10, 10, 10, 20, 30, 40
+        // (cumulative 10, 20, 30, 50, 80, 120). Fast at the start to
+        // catch the common "buyer approved in 5s" case, then backed off
+        // so we don't hammer the API while the buyer hunts for their PIN.
+        POLL_INTERVALS: [10, 10, 10, 20, 30, 40],
+        TOTAL_WINDOW_SECONDS: 120,
+
         /**
-         * Poll the verify endpoint until completed, failed, or timeout.
+         * Poll the verify endpoint following the smart cadence above.
+         * Returns a controller object the caller can use to cancel
+         * (e.g. when the buyer clicks "Cancel Payment" in the modal).
          *
          * @param {string}   reference
          * @param {Function} onSuccess  Called with { reference, status }
          * @param {Function} onFailed   Called with error message
-         * @param {number}   maxAttempts Default 60
-         * @param {number}   interval   Default 5000ms
+         * @param {Object}   [opts]
+         * @param {Array<number>} [opts.intervals]  Override seconds between polls
+         * @param {number}   [opts.windowSeconds]   Override total window
+         * @param {Function} [opts.onTick]          Called every 1s with { remaining, nextCheckIn, attempt, checking }
+         * @returns {{ cancel: Function, checkNow: Function }}
          */
-        pollStatus: function (reference, onSuccess, onFailed, maxAttempts, interval) {
-            maxAttempts = maxAttempts || 60;
-            interval = interval || 5000;
-            var attempts = 0;
+        pollStatus: function (reference, onSuccess, onFailed, opts) {
+            opts = opts || {};
+            var intervals = opts.intervals || this.POLL_INTERVALS;
+            var windowSeconds = opts.windowSeconds || this.TOTAL_WINDOW_SECONDS;
+            var onTick = typeof opts.onTick === 'function' ? opts.onTick : null;
 
-            var poll = function () {
-                if (attempts >= maxAttempts) {
-                    onFailed('Payment verification timed out. Please check your transaction history.');
-                    return;
-                }
-                attempts++;
+            var self = this;
+            var stopped = false;
+            var checking = false;
+            var pollIdx = 0;
+            var elapsed = 0;
+            var nextCheckIn = intervals[0];
+            var pollTimer = null;
+            var tickTimer = null;
 
-                fetch(dgwCheckout.restUrl + 'verify', {
+            function stopAll() {
+                stopped = true;
+                if (pollTimer) clearTimeout(pollTimer);
+                if (tickTimer) clearInterval(tickTimer);
+                pollTimer = null;
+                tickTimer = null;
+            }
+
+            function fireTick() {
+                if (!onTick) return;
+                onTick({
+                    remaining: Math.max(0, windowSeconds - elapsed),
+                    nextCheckIn: nextCheckIn,
+                    attempt: pollIdx + 1,
+                    totalAttempts: intervals.length,
+                    checking: checking,
+                });
+            }
+
+            function checkOnce() {
+                if (stopped || checking) return Promise.resolve(false);
+                checking = true;
+                fireTick();
+                return fetch(dgwCheckout.restUrl + 'verify', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -88,23 +127,56 @@
                 .then(function (data) {
                     var status = (data.data && data.data.status) || '';
                     if (status === 'completed') {
+                        stopAll();
                         onSuccess({ reference: reference, status: 'completed' });
-                        return;
+                        return true;
                     }
                     if (status === 'failed') {
+                        stopAll();
                         onFailed('Payment failed. Please try again.');
-                        return;
+                        return true;
                     }
-                    setTimeout(poll, interval);
+                    return false;
                 })
-                .catch(function () {
-                    // Network error — keep polling.
-                    setTimeout(poll, interval);
+                .catch(function () { return false; })
+                .then(function (done) {
+                    checking = false;
+                    fireTick();
+                    return done;
                 });
-            };
+            }
 
-            // Start after a short initial delay.
-            setTimeout(poll, 3000);
+            function schedulePoll() {
+                if (stopped || pollIdx >= intervals.length) return;
+                nextCheckIn = intervals[pollIdx];
+                pollTimer = setTimeout(function () {
+                    checkOnce().then(function (done) {
+                        if (done) return;
+                        pollIdx += 1;
+                        schedulePoll();
+                    });
+                }, nextCheckIn * 1000);
+            }
+
+            // 1Hz wall-clock for the countdown + timeout.
+            tickTimer = setInterval(function () {
+                if (stopped) return;
+                elapsed += 1;
+                nextCheckIn = Math.max(0, nextCheckIn - 1);
+                fireTick();
+                if (elapsed >= windowSeconds) {
+                    stopAll();
+                    onFailed('Payment verification timed out after ' + windowSeconds + ' seconds. If you approved on your phone late, give it a moment — we will email a receipt if it goes through.');
+                }
+            }, 1000);
+
+            schedulePoll();
+            fireTick();
+
+            return {
+                cancel: function () { stopAll(); },
+                checkNow: function () { return checkOnce(); },
+            };
         },
 
         /* ------------------------------------------------------------ */

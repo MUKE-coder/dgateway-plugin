@@ -554,3 +554,187 @@
         font-size: 18px;
     }
 }
+
+/* ───────────────────────────────────────────────────────────────────
+   v1.1 — Smart-polling waiting UI inside the modal.
+   Countdown + progress bar + "Check Now" / "Cancel" actions, plus the
+   in-app cancel-confirmation overlay that replaces window.confirm().
+   ─────────────────────────────────────────────────────────────────── */
+.dgw-modal-spinner-wrap {
+    position: relative;
+    display: inline-flex;
+    width: 80px;
+    height: 80px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(79, 70, 229, 0.08);
+    margin-bottom: 16px;
+}
+.dgw-modal-ping {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #4f46e5;
+    opacity: 0;
+    transition: opacity 0.2s;
+    animation: dgwModalPing 1.2s ease-in-out infinite;
+}
+.dgw-modal-processing-text {
+    font-size: 14px;
+    color: #4b5563;
+    line-height: 1.6;
+    margin: 0 0 16px;
+    max-width: 320px;
+}
+.dgw-modal-countdown {
+    width: 100%;
+    max-width: 320px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px;
+    background: #f9fafb;
+    margin: 4px 0 12px;
+    text-align: center;
+}
+.dgw-modal-countdown-label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #6b7280;
+    margin-bottom: 4px;
+}
+.dgw-modal-countdown-value {
+    display: block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 30px;
+    font-weight: 700;
+    color: #111827;
+}
+.dgw-modal-progress {
+    margin-top: 12px;
+    height: 6px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    overflow: hidden;
+}
+.dgw-modal-progress-fill {
+    height: 100%;
+    background: #4f46e5;
+    width: 0%;
+    transition: width 1s linear;
+}
+.dgw-modal-tick {
+    font-size: 13px;
+    color: #6b7280;
+    margin: 0 0 16px;
+}
+.dgw-modal-poll-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+    max-width: 320px;
+    margin-bottom: 14px;
+}
+.dgw-modal-btn-check {
+    background: rgba(79, 70, 229, 0.08);
+    color: #4f46e5;
+    border: 1px solid rgba(79, 70, 229, 0.3);
+}
+.dgw-modal-btn-check:hover:not(:disabled) {
+    background: rgba(79, 70, 229, 0.14);
+}
+.dgw-modal-btn-cancel {
+    background: transparent;
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.dgw-modal-btn-cancel:hover {
+    background: rgba(239, 68, 68, 0.06);
+}
+
+/* Cancel-confirmation overlay */
+.dgw-modal-cancel-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100000; /* above the payment modal (which is 99999) */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.dgw-modal-cancel-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+}
+.dgw-modal-cancel-panel {
+    position: relative;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 360px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+.dgw-modal-cancel-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(245, 158, 11, 0.12);
+    color: #f59e0b;
+    font-weight: 700;
+    font-size: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+}
+.dgw-modal-cancel-panel h4 {
+    margin: 0 0 8px;
+    font-size: 17px;
+    font-weight: 600;
+    color: #111827;
+}
+.dgw-modal-cancel-panel p {
+    margin: 0 0 18px;
+    font-size: 13px;
+    color: #4b5563;
+    line-height: 1.6;
+}
+.dgw-modal-cancel-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding-top: 14px;
+    border-top: 1px solid #e5e7eb;
+}
+.dgw-modal-btn-keep {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+}
+.dgw-modal-btn-keep:hover {
+    background: #e5e7eb;
+}
+.dgw-modal-btn-confirm-cancel {
+    background: #ef4444;
+    color: #ffffff;
+    border: 1px solid #ef4444;
+}
+.dgw-modal-btn-confirm-cancel:hover {
+    background: #dc2626;
+}
+
+@keyframes dgwModalPing {
+    0% { transform: scale(1); opacity: 1; }
+    75%, 100% { transform: scale(2); opacity: 0; }
+}

@@ -45,12 +45,35 @@ class DGW_WC_Blocks_Integration extends AbstractPaymentMethodType {
 
     /**
      * Data passed to the JS payment form via getSetting('dgateway_data', {}).
+     *
+     * Mirrors the toggles exposed by DGW_WC_Gateway.init_form_fields()
+     * so the Blocks checkout can hide the Card tab when the admin has
+     * disabled Card payments — and surface the FX preview ("you'll be
+     * charged $5") on the front-end so buyers aren't surprised on their
+     * statements.
      */
     public function get_payment_method_data(): array {
+        $enableMomo = ($this->settings['enable_momo'] ?? 'yes') === 'yes';
+        $enableCard = ($this->settings['enable_card'] ?? 'no') === 'yes';
+        $shopCurrency = function_exists('get_woocommerce_currency') ? get_woocommerce_currency() : 'UGX';
+        $stripeCurrency = $this->settings['stripe_currency'] ?? 'USD';
+        $rate = floatval($this->settings['usd_exchange_rate'] ?? 0);
+
+        // Card only effectively available when configured. Same logic
+        // as DGW_WC_Gateway::card_enabled() — keep them in sync.
+        $cardEffective = $enableCard && (
+            strtoupper($shopCurrency) === strtoupper($stripeCurrency) || $rate > 0
+        );
+
         return [
-            'title'       => $this->settings['title'] ?? __('DGateway Payment', 'dgateway'),
-            'description' => $this->settings['description'] ?? __('Pay with Mobile Money or Card via DGateway.', 'dgateway'),
-            'supports'    => ['products'],
+            'title'           => $this->settings['title'] ?? __('DGateway Payment', 'dgateway'),
+            'description'    => $this->settings['description'] ?? __('Pay with Mobile Money or Card via DGateway.', 'dgateway'),
+            'supports'       => ['products'],
+            'enable_momo'    => $enableMomo,
+            'enable_card'    => $cardEffective,
+            'shop_currency'  => $shopCurrency,
+            'stripe_currency' => $stripeCurrency,
+            'exchange_rate'  => $rate,
         ];
     }
 }

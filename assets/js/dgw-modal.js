@@ -16,6 +16,8 @@
         _stripe: null,
         _stripeElements: null,
         _error: '',
+        _pollController: null,   // returned by DGW_Checkout.pollStatus()
+        _showCancelModal: false, // in-app cancel-confirmation overlay
 
         /* ------------------------------------------------------------ */
         /*  Open Modal                                                    */
@@ -143,14 +145,33 @@
                         '</div>';
                     break;
                 case 'processing':
-                    var msg = (cfg.provider === 'iotec' || !cfg.provider) ?
-                        'A payment prompt has been sent to your phone.<br>Please confirm on your phone.' :
-                        'Processing your card payment...';
-                    body = '<div class="dgw-modal-body"><div class="dgw-modal-processing">' +
-                        '<div class="dgw-modal-spinner"></div>' +
-                        '<p>' + msg + '</p>' +
-                        '<p class="dgw-modal-ref">Ref: ' + this._escHtml(this._reference) + '</p>' +
-                        '</div></div>';
+                    var isMomo = (cfg.provider === 'iotec' || !cfg.provider);
+                    var msg = isMomo
+                        ? 'We sent a prompt to your phone. Open your mobile-money menu, enter your PIN, and approve the request.'
+                        : 'Processing your card payment…';
+                    body = '<div class="dgw-modal-body">' +
+                        '<div class="dgw-modal-processing">' +
+                            '<div class="dgw-modal-spinner-wrap">' +
+                                '<div class="dgw-modal-spinner"></div>' +
+                                '<span class="dgw-modal-ping" data-role="ping"></span>' +
+                            '</div>' +
+                            '<p class="dgw-modal-processing-text">' + msg + '</p>' +
+                            (isMomo
+                                ? '<div class="dgw-modal-countdown">' +
+                                    '<span class="dgw-modal-countdown-label">Time remaining</span>' +
+                                    '<span class="dgw-modal-countdown-value" data-role="time">2:00</span>' +
+                                    '<div class="dgw-modal-progress"><div class="dgw-modal-progress-fill" data-role="bar"></div></div>' +
+                                  '</div>' +
+                                  '<p class="dgw-modal-tick" data-role="tick">Next check in 10s · attempt 1 of 6</p>' +
+                                  '<div class="dgw-modal-poll-actions">' +
+                                    '<button type="button" class="dgw-modal-btn dgw-modal-btn-check" data-role="check">I\'ve Paid — Check Now</button>' +
+                                    '<button type="button" class="dgw-modal-btn dgw-modal-btn-cancel" data-role="cancel">Cancel Payment</button>' +
+                                  '</div>'
+                                : ''
+                            ) +
+                            '<p class="dgw-modal-ref">Ref: ' + this._escHtml(this._reference) + '</p>' +
+                        '</div>' +
+                    '</div>';
                     break;
                 case 'completed':
                     var completedTitle = cfg._completedTitle || 'Payment Successful!';
@@ -325,6 +346,64 @@
                     }
                 });
             }
+
+            // "I've Paid — Check Now" — force a verify request without
+            // waiting for the next scheduled poll. Most useful when the
+            // buyer approves on their phone in 5s and doesn't want to
+            // sit through the next 10s interval.
+            var checkBtn = overlay.querySelector('[data-role="check"]');
+            if (checkBtn) {
+                checkBtn.addEventListener('click', function () {
+                    if (self._pollController) self._pollController.checkNow();
+                });
+            }
+
+            // "Cancel Payment" — opens the in-app confirmation modal
+            // (replaces window.confirm so the dialog matches the rest
+            // of the checkout UI).
+            var cancelBtn = overlay.querySelector('[data-role="cancel"]');
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', function () {
+                    self._showCancelConfirmation();
+                });
+            }
+        },
+
+        /**
+         * Render the in-app cancel-confirmation dialog as a sibling
+         * overlay (so it sits above the payment modal). Two actions:
+         * Keep waiting (dismiss) or Yes, cancel (stop the poll and
+         * transition to the failed state with retry buttons).
+         */
+        _showCancelConfirmation: function () {
+            var self = this;
+            if (document.getElementById('dgw-modal-cancel-confirm')) return;
+
+            var confirm = document.createElement('div');
+            confirm.id = 'dgw-modal-cancel-confirm';
+            confirm.className = 'dgw-modal-cancel-overlay';
+            confirm.innerHTML = ''
+                + '<div class="dgw-modal-cancel-backdrop"></div>'
+                + '<div class="dgw-modal-cancel-panel">'
+                +   '<div class="dgw-modal-cancel-icon">!</div>'
+                +   '<h4>Cancel this payment?</h4>'
+                +   '<p>If you\'ve already approved the prompt on your phone, the transaction may still complete and your receipt will arrive by email — no need to pay again.</p>'
+                +   '<div class="dgw-modal-cancel-actions">'
+                +     '<button type="button" class="dgw-modal-btn dgw-modal-btn-keep" data-action="keep">Keep waiting</button>'
+                +     '<button type="button" class="dgw-modal-btn dgw-modal-btn-confirm-cancel" data-action="confirm">Yes, cancel</button>'
+                +   '</div>'
+                + '</div>';
+
+            document.body.appendChild(confirm);
+
+            function dismiss() { confirm.remove(); }
+            confirm.querySelector('[data-action="keep"]').addEventListener('click', dismiss);
+            confirm.querySelector('.dgw-modal-cancel-backdrop').addEventListener('click', dismiss);
+            confirm.querySelector('[data-action="confirm"]').addEventListener('click', function () {
+                dismiss();
+                if (self._pollController) { self._pollController.cancel(); self._pollController = null; }
+                self._onFailed('You cancelled the payment. If you\'d already approved on your phone, the receipt will still arrive by email.');
+            });
         },
 
         /* ------------------------------------------------------------ */
@@ -354,15 +433,52 @@
                 self._state = 'processing';
                 self._render();
                 self._show();
-
-                DGW_Checkout.pollStatus(ref,
-                    function () { self._onSuccess(); },
-                    function (err) { self._onFailed(err); }
-                );
+                self._startPolling(ref);
             })
             .catch(function (err) {
                 self._onFailed(err.message || 'Failed to initiate payment');
             });
+        },
+
+        /* ------------------------------------------------------------ */
+        /*  Polling helper — wires DGW_Checkout.pollStatus to the modal */
+        /*  DOM (countdown, progress bar, tick text) without forcing a  */
+        /*  full re-render every second.                                */
+        /* ------------------------------------------------------------ */
+        _startPolling: function (reference) {
+            var self = this;
+            if (this._pollController) { this._pollController.cancel(); this._pollController = null; }
+            this._pollController = DGW_Checkout.pollStatus(reference,
+                function () { self._onSuccess(); },
+                function (err) { self._onFailed(err); },
+                {
+                    onTick: function (state) {
+                        if (self._state !== 'processing' || !self._overlay) return;
+                        var time = self._overlay.querySelector('[data-role="time"]');
+                        var bar  = self._overlay.querySelector('[data-role="bar"]');
+                        var tick = self._overlay.querySelector('[data-role="tick"]');
+                        var ping = self._overlay.querySelector('[data-role="ping"]');
+                        if (time) {
+                            var m = Math.floor(state.remaining / 60), r = state.remaining % 60;
+                            time.textContent = m + ':' + (r < 10 ? '0' : '') + r;
+                        }
+                        if (bar) {
+                            var pct = Math.min(100, ((120 - state.remaining) / 120) * 100);
+                            bar.style.width = pct + '%';
+                        }
+                        if (tick) {
+                            if (state.checking) {
+                                tick.textContent = 'Checking your payment now…';
+                            } else if (state.attempt <= state.totalAttempts) {
+                                tick.textContent = 'Next check in ' + state.nextCheckIn + 's · attempt ' + state.attempt + ' of ' + state.totalAttempts;
+                            } else {
+                                tick.textContent = 'Still waiting for confirmation…';
+                            }
+                        }
+                        if (ping) ping.style.opacity = state.checking ? '1' : '0';
+                    },
+                }
+            );
         },
 
         _initStripePayment: function () {
@@ -424,11 +540,7 @@
                 self._state = 'processing';
                 self._render();
                 self._show();
-
-                DGW_Checkout.pollStatus(self._reference,
-                    function () { self._onSuccess(); },
-                    function (err) { self._onFailed(err); }
-                );
+                self._startPolling(self._reference);
             })
             .catch(function (err) {
                 self._error = err.message || 'Card payment failed';
