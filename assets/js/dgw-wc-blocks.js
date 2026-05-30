@@ -45,11 +45,14 @@
     /* ------------------------------------------------------------------ */
     var styles = {
         tabWrap: { display: 'flex', gap: '10px', marginBottom: '16px' },
+        // Active tab uses the host theme's primary surface (black) so it
+        // visually matches the theme's Place Order button instead of
+        // grafting a foreign purple gradient onto the checkout.
         tabActive: {
-            flex: 1, padding: '12px 16px', border: 'none', borderRadius: '10px',
-            background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', cursor: 'pointer',
-            fontSize: '14px', fontWeight: 700, color: '#fff',
-            boxShadow: '0 4px 14px rgba(79,70,229,0.35)',
+            flex: 1, padding: '12px 16px', border: '1px solid #000', borderRadius: '10px',
+            background: '#0a0a0a', cursor: 'pointer',
+            fontSize: '14px', fontWeight: 700, color: '#ffffff',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
         },
         tabInactive: {
@@ -105,11 +108,27 @@
         var s2 = useState('');
         var phone = s2[0], setPhone = s2[1];
 
-        // Cart total arrives in integer minor units (cents). Convert
-        // to major units for display.
+        // Cart total arrives in integer minor units. The divisor is
+        // currency-dependent — UGX/TZS/RWF are zero-decimal so a 7,400
+        // total is just "7400" (NOT 740000), while USD has 2 decimals
+        // so $5.00 is "500". Previously we always divided by 100, which
+        // turned UGX 7,400 into 74 at the FX preview. Detect the right
+        // minor-unit count from whichever WC field carries it.
         var cartTotal = 0;
         if (billing.cartTotal && typeof billing.cartTotal.value !== 'undefined') {
-            cartTotal = parseInt(billing.cartTotal.value, 10) / 100;
+            var raw = parseInt(billing.cartTotal.value, 10);
+            if (isNaN(raw)) raw = 0;
+            var minorUnit = 2;
+            if (typeof billing.cartTotal.currencyMinorUnit === 'number') {
+                minorUnit = billing.cartTotal.currencyMinorUnit;
+            } else if (billing.cartTotal.currency && typeof billing.cartTotal.currency.minorUnit === 'number') {
+                minorUnit = billing.cartTotal.currency.minorUnit;
+            } else if (shopCurrency === 'UGX' || shopCurrency === 'TZS' || shopCurrency === 'RWF') {
+                // Last-resort fallback for the East African shilling/franc
+                // family — known zero-decimal currencies.
+                minorUnit = 0;
+            }
+            cartTotal = raw / Math.pow(10, minorUnit);
         }
         var needsFx = enableCard && shopCurrency !== stripeCurrency && exchangeRate > 0;
         var stripeAmount = needsFx ? cartTotal / exchangeRate : cartTotal;
@@ -168,22 +187,33 @@
             )
             : null;
 
-        // Card body — when needsFx is true, show the explicit charged
-        // amount in the Stripe settlement currency. This is the bit
-        // that fixes "buyer sees mobile-money UI after picking Card"
-        // by communicating clearly what the next step charges them.
+        // Card body — when needsFx is true, spell out the conversion
+        // line-by-line so the buyer can't misread the amount. JB caught
+        // a case where the old single-line "Charged on your card: USD
+        // 0.02 ≈ UGX 74" wording had a unit bug AND was easy to scan
+        // wrong. New layout: big bold "You will be charged USD 2.00",
+        // then a sub-line "= UGX 7,400 (your cart total)" and the rate
+        // explicitly: "Conversion rate: 1 USD = UGX 3,700".
         var cardBody = (enableCard && payMethod === 'card')
             ? createElement('div', { style: styles.cardNotice },
                 createElement('span', { style: { fontSize: '20px' } }, '🔒'),
                 createElement('div', null,
                     (needsFx && cartTotal > 0)
                         ? createElement('div', { style: styles.cardChargedLine },
-                            'Charged on your card: ' + fmtAmount(stripeAmount, stripeCurrency),
+                            'You will be charged ' + fmtAmount(stripeAmount, stripeCurrency) + ' on your card.',
                             createElement('div', { style: styles.cardChargedSub },
-                                '≈ ' + fmtAmount(cartTotal, shopCurrency) + ' at ' + shopCurrency + ' ' + Math.round(exchangeRate).toLocaleString() + ' per 1 ' + stripeCurrency
+                                'That equals ' + fmtAmount(cartTotal, shopCurrency) + ' — your cart total.'
+                            ),
+                            createElement('div', { style: styles.cardChargedSub },
+                                'Conversion rate: 1 ' + stripeCurrency + ' = ' + fmtAmount(exchangeRate, shopCurrency).replace(shopCurrency + ' ', shopCurrency + ' ')
                             )
                           )
-                        : null,
+                        : (cartTotal > 0
+                            ? createElement('div', { style: styles.cardChargedLine },
+                                'You will be charged ' + fmtAmount(cartTotal, shopCurrency) + ' on your card.'
+                              )
+                            : null
+                          ),
                     createElement('span', null, 'Your card details will be collected securely on the next step — your card data never touches this site.')
                 )
             )

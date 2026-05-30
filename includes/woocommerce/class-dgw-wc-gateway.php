@@ -224,23 +224,45 @@ class DGW_WC_Gateway extends \WC_Payment_Gateway {
             <div class="dgw-wc-tab-content dgw-wc-tab-card <?php echo $defaultTab === 'card' ? 'active' : ''; ?>">
                 <?php if (strtoupper($shopCurrency) !== strtoupper($cardCurrency) && $cartTotal > 0): ?>
                 <div class="dgw-wc-card-fx">
-                    <p><strong><?php esc_html_e('Charged on your card:', 'dgateway'); ?></strong>
-                       <?php echo esc_html($cardCurrency . ' ' . number_format($cardAmount, 2)); ?>
-                       <small style="display:block;margin-top:4px;color:#6b7280;">
-                           &asymp; <?php echo esc_html($shopCurrency . ' ' . number_format($cartTotal, 0)); ?>
-                           <?php
-                           /* translators: %1$s = shop currency, %2$s = rate, %3$s = stripe currency */
-                           printf(esc_html__('at %1$s %2$s per 1 %3$s', 'dgateway'),
-                               esc_html($shopCurrency),
-                               esc_html(number_format($rate, 0)),
-                               esc_html($cardCurrency)
-                           );
-                           ?>
-                       </small>
+                    <p style="margin:0 0 6px;font-weight:700;font-size:14px;color:#0f172a;">
+                        <?php
+                        /* translators: %s = formatted card amount, e.g. "USD 2.00" */
+                        printf(esc_html__('You will be charged %s on your card.', 'dgateway'),
+                            esc_html($cardCurrency . ' ' . number_format($cardAmount, 2))
+                        );
+                        ?>
+                    </p>
+                    <p style="margin:0 0 4px;color:#475569;font-size:13px;">
+                        <?php
+                        /* translators: %s = formatted cart total, e.g. "UGX 7,400" */
+                        printf(esc_html__('That equals %s — your cart total.', 'dgateway'),
+                            esc_html($shopCurrency . ' ' . number_format($cartTotal, 0))
+                        );
+                        ?>
+                    </p>
+                    <p style="margin:0;color:#475569;font-size:13px;">
+                        <?php
+                        /* translators: %1$s = stripe currency, %2$s = shop currency, %3$s = rate */
+                        printf(esc_html__('Conversion rate: 1 %1$s = %2$s %3$s.', 'dgateway'),
+                            esc_html($cardCurrency),
+                            esc_html($shopCurrency),
+                            esc_html(number_format($rate, 0))
+                        );
+                        ?>
+                    </p>
+                </div>
+                <?php elseif ($cartTotal > 0): ?>
+                <div class="dgw-wc-card-fx">
+                    <p style="margin:0;font-weight:700;font-size:14px;color:#0f172a;">
+                        <?php
+                        printf(esc_html__('You will be charged %s on your card.', 'dgateway'),
+                            esc_html($cardCurrency . ' ' . number_format($cardAmount, 2))
+                        );
+                        ?>
                     </p>
                 </div>
                 <?php endif; ?>
-                <p><?php esc_html_e('You will be prompted to enter your card details securely after placing the order — your card data never touches this site.', 'dgateway'); ?></p>
+                <p><?php esc_html_e('Your card details will be collected securely on the next step — your card data never touches this site.', 'dgateway'); ?></p>
             </div>
             <?php endif; ?>
 
@@ -250,31 +272,44 @@ class DGW_WC_Gateway extends \WC_Payment_Gateway {
         <style>
             .dgw-wc-tabs {
                 display: flex;
-                gap: 8px;
+                gap: 10px;
                 margin-bottom: 16px;
             }
             .dgw-wc-tab {
                 flex: 1;
-                padding: 10px;
-                border: 2px solid #e0e0e0;
-                border-radius: 8px;
-                background: #fff;
+                padding: 12px 16px;
+                border: 2px solid #e5e7eb;
+                border-radius: 10px;
+                background: #f9fafb;
                 cursor: pointer;
-                font-size: 13px;
+                font-size: 14px;
                 font-weight: 600;
+                color: #6b7280;
                 text-align: center;
-                transition: all 0.15s;
+                transition: all 0.15s ease;
             }
+            /* Active tab takes on the host theme's primary button vibe
+               (black) instead of a hard-coded brand colour so it blends
+               with most WooCommerce themes. */
             .dgw-wc-tab.active {
-                border-color: #4f46e5;
-                background: #eef2ff;
-                color: #4f46e5;
+                border-color: #0a0a0a;
+                background: #0a0a0a;
+                color: #ffffff;
+                box-shadow: 0 4px 14px rgba(0,0,0,0.2);
             }
             .dgw-wc-tab-content {
                 display: none;
+                margin-top: 12px;
             }
             .dgw-wc-tab-content.active {
                 display: block;
+            }
+            .dgw-wc-card-fx {
+                background: #f0f9ff;
+                border: 1px solid #bae6fd;
+                border-radius: 10px;
+                padding: 14px 16px;
+                margin-bottom: 12px;
             }
             #dgw-wc-payment-fields small {
                 color: #888;
@@ -928,8 +963,11 @@ JS;
         .dgw-thankyou-btn-confirm-cancel { background:#ef4444; color:#ffffff; }
 
         /* The big Stripe-branded Pay button — full-width, prominent. */
-        .dgw-thankyou-btn-pay { width:100%; padding:15px 18px; font-size:15px; font-weight:700; background:linear-gradient(135deg,#635bff 0%,#7c3aed 100%); color:#ffffff; border:0; box-shadow:0 8px 20px rgba(99,91,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.12); margin:8px 0 0; letter-spacing:0.01em; }
-        .dgw-thankyou-btn-pay:hover:not(:disabled) { background:linear-gradient(135deg,#5046e5 0%,#6d28d9 100%); box-shadow:0 10px 24px rgba(99,91,255,0.42), inset 0 -1px 0 rgba(0,0,0,0.12); }
+        /* Pay button — black to match the host theme's primary
+           "Place Order" button instead of a hard-coded purple gradient
+           that clashes with most WooCommerce themes. */
+        .dgw-thankyou-btn-pay { width:100%; padding:15px 18px; font-size:15px; font-weight:700; background:#0a0a0a; color:#ffffff; border:1px solid #0a0a0a; box-shadow:0 8px 20px rgba(0,0,0,0.25), inset 0 -1px 0 rgba(255,255,255,0.08); margin:8px 0 0; letter-spacing:0.01em; }
+        .dgw-thankyou-btn-pay:hover:not(:disabled) { background:#000000; box-shadow:0 10px 24px rgba(0,0,0,0.32), inset 0 -1px 0 rgba(255,255,255,0.10); }
         .dgw-thankyou-btn-pay .dgw-pay-icon { width:16px; height:16px; margin-right:8px; }
 
         .dgw-thankyou-ref { margin:0; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:#94a3b8; letter-spacing:0.02em; }
@@ -1025,14 +1063,28 @@ JS;
 
                     <div class="dgw-stripe-amount-card">
                         <div>
-                            <span class="dgw-stripe-amount-label">You&rsquo;ll be charged</span>
+                            <span class="dgw-stripe-amount-label">You will be charged</span>
                             <span class="dgw-stripe-amount-value">
                                 <?php echo esc_html(strtoupper($stripeCurrency) . ' ' . number_format($stripeAmount, 2)); ?>
                             </span>
                             <?php if ($showFx): ?>
                                 <p class="dgw-stripe-amount-fx">
-                                    &asymp; <?php echo esc_html(strtoupper($shopCurrency) . ' ' . number_format($shopAmount, 0)); ?>
-                                    &nbsp;&middot;&nbsp; <?php echo esc_html(strtoupper($shopCurrency) . ' ' . number_format($rate, 0)); ?> per 1 <?php echo esc_html(strtoupper($stripeCurrency)); ?>
+                                    <?php
+                                    /* translators: %s = formatted cart total in the shop currency */
+                                    printf(esc_html__('Equals %s — your cart total.', 'dgateway'),
+                                        esc_html(strtoupper($shopCurrency) . ' ' . number_format($shopAmount, 0))
+                                    );
+                                    ?>
+                                </p>
+                                <p class="dgw-stripe-amount-fx">
+                                    <?php
+                                    /* translators: %1$s = stripe currency, %2$s = shop currency, %3$s = rate */
+                                    printf(esc_html__('Conversion rate: 1 %1$s = %2$s %3$s.', 'dgateway'),
+                                        esc_html(strtoupper($stripeCurrency)),
+                                        esc_html(strtoupper($shopCurrency)),
+                                        esc_html(number_format($rate, 0))
+                                    );
+                                    ?>
                                 </p>
                             <?php endif; ?>
                         </div>
