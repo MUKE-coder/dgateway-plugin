@@ -871,65 +871,110 @@ JS;
             schedulePoll();
         })();
         </script>
+        <?php
+        $this->thankyou_shared_styles();
+    }
+
+    /**
+     * Inline CSS shared between the MoMo polling UI and the Stripe
+     * card form. Both branches of thankyou_polling_ui need this so
+     * the rendered HTML actually has chrome — previously the Card
+     * branch returned before reaching the <style> block at the
+     * bottom of the MoMo path and shipped as unstyled HTML.
+     *
+     * Light-first; flips to dark via prefers-color-scheme so it
+     * blends into whichever theme the host site is running.
+     */
+    private function thankyou_shared_styles() {
+        static $emitted = false;
+        if ($emitted) return;
+        $emitted = true;
+        ?>
         <style>
-        .dgw-thankyou-waiter { max-width:480px; margin:32px auto; }
-        .dgw-thankyou-card { background:#ffffff; border:1px solid #e5e7eb; border-radius:16px; padding:32px 28px; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,0.06); position:relative; }
-        .dgw-thankyou-spinner-wrap { display:inline-flex; width:80px; height:80px; align-items:center; justify-content:center; border-radius:50%; background:rgba(79,70,229,0.08); margin-bottom:20px; position:relative; }
-        .dgw-thankyou-spinner { width:40px; height:40px; border:3px solid rgba(79,70,229,0.2); border-top-color:#4f46e5; border-radius:50%; animation:dgwSpin 0.9s linear infinite; }
-        .dgw-thankyou-ping { position:absolute; top:-4px; right:-4px; width:12px; height:12px; border-radius:50%; background:#4f46e5; display:none; }
+        .dgw-thankyou-waiter { max-width:520px; margin:32px auto; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; }
+        .dgw-thankyou-card { background:#ffffff; border:1px solid #e5e7eb; border-radius:20px; padding:36px 32px; text-align:center; box-shadow:0 12px 32px rgba(15,23,42,0.08), 0 2px 6px rgba(15,23,42,0.04); position:relative; }
+        .dgw-thankyou-card.dgw-card-left { text-align:left; }
+        .dgw-thankyou-spinner-wrap { display:inline-flex; width:80px; height:80px; align-items:center; justify-content:center; border-radius:50%; background:rgba(99,91,255,0.10); margin-bottom:20px; position:relative; }
+        .dgw-thankyou-spinner { width:40px; height:40px; border:3px solid rgba(99,91,255,0.22); border-top-color:#635bff; border-radius:50%; animation:dgwSpin 0.9s linear infinite; }
+        .dgw-thankyou-ping { position:absolute; top:-4px; right:-4px; width:12px; height:12px; border-radius:50%; background:#635bff; display:none; }
         .dgw-thankyou-card.dgw-checking .dgw-thankyou-ping { display:block; animation:dgwPing 1s ease-in-out infinite; }
-        .dgw-thankyou-spinner-wrap.dgw-success { background:rgba(34,197,94,0.1); color:#22c55e; }
+        .dgw-thankyou-spinner-wrap.dgw-success { background:rgba(34,197,94,0.12); color:#22c55e; }
         .dgw-thankyou-spinner-wrap.dgw-success .dgw-thankyou-spinner,
         .dgw-thankyou-spinner-wrap.dgw-failed .dgw-thankyou-spinner { display:none; }
-        .dgw-thankyou-spinner-wrap.dgw-failed { background:rgba(239,68,68,0.1); color:#ef4444; }
-        .dgw-state-cancelled .dgw-thankyou-spinner-wrap.dgw-failed { background:rgba(245,158,11,0.1); color:#f59e0b; }
-        .dgw-thankyou-title { margin:0 0 12px; font-size:22px; font-weight:700; color:#111827; }
-        .dgw-thankyou-subtitle { margin:0 0 20px; font-size:14px; color:#4b5563; line-height:1.6; }
-        .dgw-thankyou-countdown { border:1px solid #e5e7eb; border-radius:12px; padding:16px; background:#f9fafb; margin-bottom:16px; }
-        .dgw-thankyou-countdown-label { display:block; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#6b7280; margin-bottom:4px; }
-        .dgw-thankyou-countdown-value { display:block; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:32px; font-weight:700; color:#111827; }
-        .dgw-thankyou-progress { margin-top:12px; height:6px; border-radius:999px; background:#e5e7eb; overflow:hidden; }
-        .dgw-thankyou-progress-fill { height:100%; background:#4f46e5; width:0%; transition:width 1s linear; }
-        .dgw-thankyou-tick { margin:0 0 20px; font-size:13px; color:#6b7280; }
+        .dgw-thankyou-spinner-wrap.dgw-failed { background:rgba(239,68,68,0.12); color:#ef4444; }
+        .dgw-state-cancelled .dgw-thankyou-spinner-wrap.dgw-failed { background:rgba(245,158,11,0.12); color:#f59e0b; }
+        .dgw-thankyou-title { margin:0 0 10px; font-size:22px; font-weight:700; color:#0f172a; letter-spacing:-0.01em; }
+        .dgw-thankyou-subtitle { margin:0 0 22px; font-size:14.5px; color:#475569; line-height:1.6; }
+        .dgw-thankyou-countdown { border:1px solid #e5e7eb; border-radius:14px; padding:18px 20px; background:#f8fafc; margin-bottom:18px; }
+        .dgw-thankyou-countdown-label { display:block; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#64748b; margin-bottom:6px; font-weight:600; }
+        .dgw-thankyou-countdown-value { display:block; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:32px; font-weight:700; color:#0f172a; line-height:1.1; }
+        .dgw-thankyou-progress { margin-top:14px; height:6px; border-radius:999px; background:#e2e8f0; overflow:hidden; }
+        .dgw-thankyou-progress-fill { height:100%; background:linear-gradient(90deg,#635bff,#a855f7); width:0%; transition:width 1s linear; }
+        .dgw-thankyou-tick { margin:0 0 22px; font-size:13px; color:#64748b; }
         .dgw-thankyou-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:18px; }
-        .dgw-thankyou-actions-terminal { max-width:280px; margin:24px auto 0; }
-        .dgw-thankyou-btn { display:inline-flex; align-items:center; justify-content:center; padding:11px 14px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; border:1px solid transparent; text-decoration:none; transition:background 0.15s, border 0.15s; }
-        .dgw-thankyou-btn-check { background:rgba(79,70,229,0.08); color:#4f46e5; border-color:rgba(79,70,229,0.3); }
-        .dgw-thankyou-btn-check:hover:not(:disabled) { background:rgba(79,70,229,0.14); }
-        .dgw-thankyou-btn-cancel { background:transparent; color:#ef4444; border-color:rgba(239,68,68,0.3); }
+        .dgw-thankyou-actions-terminal { max-width:300px; margin:24px auto 0; }
+        .dgw-thankyou-btn { display:inline-flex; align-items:center; justify-content:center; padding:12px 16px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; border:1px solid transparent; text-decoration:none; transition:transform 0.05s ease, background 0.15s ease, border 0.15s ease, box-shadow 0.15s ease; font-family:inherit; line-height:1.2; }
+        .dgw-thankyou-btn:active:not(:disabled) { transform:translateY(1px); }
+        .dgw-thankyou-btn:disabled { opacity:0.55; cursor:not-allowed; }
+        .dgw-thankyou-btn-check { background:rgba(99,91,255,0.10); color:#635bff; border-color:rgba(99,91,255,0.30); }
+        .dgw-thankyou-btn-check:hover:not(:disabled) { background:rgba(99,91,255,0.16); }
+        .dgw-thankyou-btn-cancel { background:transparent; color:#ef4444; border-color:rgba(239,68,68,0.30); }
         .dgw-thankyou-btn-cancel:hover { background:rgba(239,68,68,0.06); }
-        .dgw-thankyou-btn-retry { background:#4f46e5; color:#ffffff; }
-        .dgw-thankyou-btn-retry:hover { background:#4338ca; }
-        .dgw-thankyou-btn-back { background:#ffffff; color:#374151; border-color:#d1d5db; }
-        .dgw-thankyou-btn-back:hover { background:#f9fafb; }
-        .dgw-thankyou-btn-keep { background:#f3f4f6; color:#374151; border-color:#d1d5db; }
+        .dgw-thankyou-btn-retry { background:#635bff; color:#ffffff; box-shadow:0 4px 14px rgba(99,91,255,0.35); }
+        .dgw-thankyou-btn-retry:hover { background:#5046e5; }
+        .dgw-thankyou-btn-back { background:#ffffff; color:#334155; border-color:#cbd5e1; }
+        .dgw-thankyou-btn-back:hover { background:#f8fafc; }
+        .dgw-thankyou-btn-keep { background:#f1f5f9; color:#334155; border-color:#cbd5e1; }
         .dgw-thankyou-btn-confirm-cancel { background:#ef4444; color:#ffffff; }
-        .dgw-thankyou-ref { margin:0; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:#9ca3af; }
-        .dgw-thankyou-hint { margin:14px 0 0; text-align:center; font-size:12px; color:#9ca3af; }
+
+        /* The big Stripe-branded Pay button — full-width, prominent. */
+        .dgw-thankyou-btn-pay { width:100%; padding:15px 18px; font-size:15px; font-weight:700; background:linear-gradient(135deg,#635bff 0%,#7c3aed 100%); color:#ffffff; border:0; box-shadow:0 8px 20px rgba(99,91,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.12); margin:8px 0 0; letter-spacing:0.01em; }
+        .dgw-thankyou-btn-pay:hover:not(:disabled) { background:linear-gradient(135deg,#5046e5 0%,#6d28d9 100%); box-shadow:0 10px 24px rgba(99,91,255,0.42), inset 0 -1px 0 rgba(0,0,0,0.12); }
+        .dgw-thankyou-btn-pay .dgw-pay-icon { width:16px; height:16px; margin-right:8px; }
+
+        .dgw-thankyou-ref { margin:0; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:#94a3b8; letter-spacing:0.02em; }
+        .dgw-thankyou-hint { margin:16px 0 0; text-align:center; font-size:12.5px; color:#94a3b8; line-height:1.5; }
+
+        /* Stripe form section block */
+        .dgw-stripe-section { text-align:left; }
+        .dgw-stripe-section-title { margin:0 0 6px; font-size:20px; font-weight:700; color:#0f172a; letter-spacing:-0.01em; }
+        .dgw-stripe-section-sub { margin:0 0 22px; font-size:13.5px; color:#64748b; line-height:1.55; }
+        .dgw-stripe-amount-card { border:1px solid #e2e8f0; border-radius:14px; padding:18px 20px; background:linear-gradient(180deg,#f8fafc 0%,#ffffff 100%); margin-bottom:20px; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+        .dgw-stripe-amount-label { display:block; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#64748b; margin-bottom:6px; font-weight:600; }
+        .dgw-stripe-amount-value { display:block; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:26px; font-weight:700; color:#0f172a; line-height:1.1; }
+        .dgw-stripe-amount-fx { margin:8px 0 0; font-size:12px; color:#64748b; }
+        .dgw-stripe-amount-badge { font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#635bff; background:rgba(99,91,255,0.10); border:1px solid rgba(99,91,255,0.25); padding:5px 9px; border-radius:999px; white-space:nowrap; }
+        .dgw-stripe-element-wrap { border:1px solid #e2e8f0; border-radius:14px; padding:18px 16px; background:#ffffff; margin-bottom:18px; min-height:80px; transition:border-color 0.15s ease, box-shadow 0.15s ease; }
+        .dgw-stripe-element-wrap:focus-within { border-color:#635bff; box-shadow:0 0 0 3px rgba(99,91,255,0.15); }
+        .dgw-stripe-error { color:#ef4444; font-size:13px; margin:0 0 14px; padding:10px 12px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.20); border-radius:10px; display:none; }
+        .dgw-stripe-secured { display:flex; align-items:center; justify-content:center; gap:8px; margin-top:14px; font-size:11.5px; color:#94a3b8; }
+        .dgw-stripe-secured-dot { width:5px; height:5px; border-radius:50%; background:#cbd5e1; }
 
         .dgw-thankyou-modal[hidden] { display:none; }
         .dgw-thankyou-modal { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; padding:16px; }
-        .dgw-thankyou-modal-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); }
-        .dgw-thankyou-modal-panel { position:relative; background:#ffffff; border:1px solid #e5e7eb; border-radius:16px; padding:24px; max-width:360px; width:100%; text-align:center; box-shadow:0 20px 40px rgba(0,0,0,0.2); }
-        .dgw-thankyou-modal-icon { width:48px; height:48px; border-radius:50%; background:rgba(245,158,11,0.12); color:#f59e0b; font-weight:700; font-size:24px; display:inline-flex; align-items:center; justify-content:center; margin-bottom:14px; }
-        .dgw-thankyou-modal-panel h4 { margin:0 0 8px; font-size:17px; font-weight:600; color:#111827; }
-        .dgw-thankyou-modal-panel p { margin:0 0 18px; font-size:13px; color:#4b5563; line-height:1.6; }
+        .dgw-thankyou-modal-backdrop { position:absolute; inset:0; background:rgba(15,23,42,0.55); backdrop-filter:blur(4px); }
+        .dgw-thankyou-modal-panel { position:relative; background:#ffffff; border:1px solid #e5e7eb; border-radius:18px; padding:26px; max-width:380px; width:100%; text-align:center; box-shadow:0 24px 48px rgba(15,23,42,0.20); }
+        .dgw-thankyou-modal-icon { width:48px; height:48px; border-radius:50%; background:rgba(245,158,11,0.14); color:#f59e0b; font-weight:700; font-size:24px; display:inline-flex; align-items:center; justify-content:center; margin-bottom:16px; }
+        .dgw-thankyou-modal-panel h4 { margin:0 0 8px; font-size:17px; font-weight:600; color:#0f172a; }
+        .dgw-thankyou-modal-panel p { margin:0 0 18px; font-size:13.5px; color:#475569; line-height:1.6; }
         .dgw-thankyou-modal-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding-top:14px; border-top:1px solid #e5e7eb; }
 
         @keyframes dgwSpin { to { transform: rotate(360deg); } }
         @keyframes dgwPing { 0% { transform:scale(1); opacity:1; } 75%, 100% { transform:scale(2); opacity:0; } }
 
         @media (prefers-color-scheme: dark) {
-            .dgw-thankyou-card { background:#1f2937; border-color:rgba(255,255,255,0.08); }
-            .dgw-thankyou-title { color:#f9fafb; }
-            .dgw-thankyou-subtitle { color:#d1d5db; }
-            .dgw-thankyou-countdown { background:#111827; border-color:rgba(255,255,255,0.06); }
-            .dgw-thankyou-countdown-value { color:#f9fafb; }
-            .dgw-thankyou-modal-panel { background:#1f2937; border-color:rgba(255,255,255,0.08); }
-            .dgw-thankyou-modal-panel h4 { color:#f9fafb; }
-            .dgw-thankyou-modal-panel p { color:#d1d5db; }
-            .dgw-thankyou-btn-back { background:#1f2937; color:#e5e7eb; border-color:rgba(255,255,255,0.12); }
-            .dgw-thankyou-btn-keep { background:#374151; color:#e5e7eb; border-color:rgba(255,255,255,0.12); }
+            .dgw-thankyou-card { background:#0f172a; border-color:rgba(255,255,255,0.08); box-shadow:0 12px 32px rgba(0,0,0,0.45); }
+            .dgw-thankyou-title, .dgw-thankyou-countdown-value, .dgw-stripe-section-title, .dgw-stripe-amount-value { color:#f8fafc; }
+            .dgw-thankyou-subtitle, .dgw-stripe-section-sub { color:#cbd5e1; }
+            .dgw-thankyou-countdown { background:#020617; border-color:rgba(255,255,255,0.08); }
+            .dgw-thankyou-progress { background:rgba(255,255,255,0.10); }
+            .dgw-stripe-amount-card { background:linear-gradient(180deg,#020617 0%,#0f172a 100%); border-color:rgba(255,255,255,0.08); }
+            .dgw-stripe-element-wrap { background:#020617; border-color:rgba(255,255,255,0.10); }
+            .dgw-stripe-element-wrap:focus-within { box-shadow:0 0 0 3px rgba(99,91,255,0.25); }
+            .dgw-thankyou-modal-panel { background:#0f172a; border-color:rgba(255,255,255,0.08); }
+            .dgw-thankyou-modal-panel h4 { color:#f8fafc; }
+            .dgw-thankyou-modal-panel p { color:#cbd5e1; }
+            .dgw-thankyou-btn-back, .dgw-thankyou-btn-keep { background:#1e293b; color:#e2e8f0; border-color:rgba(255,255,255,0.12); }
         }
         </style>
         <?php
@@ -961,46 +1006,65 @@ JS;
         // "contact support" message rather than rendering a broken
         // form with no client_secret.
         if (empty($clientSecret) || empty($stripeKey)) {
+            $this->thankyou_shared_styles();
             echo '<div class="dgw-thankyou-waiter"><div class="dgw-thankyou-card"><h3 class="dgw-thankyou-title">Card details unavailable</h3><p class="dgw-thankyou-subtitle">We couldn\'t load the card form for this order. Please <a href="' . esc_url($checkoutUrl) . '">restart checkout</a> or contact the seller.</p></div></div>';
             return;
         }
+
+        // Emit the shared CSS BEFORE the markup so the form renders
+        // styled on first paint. Static guard inside the helper makes
+        // it safe to call from both branches.
+        $this->thankyou_shared_styles();
+        $showFx = !empty($shopCurrency) && strtoupper($shopCurrency) !== strtoupper($stripeCurrency) && $shopAmount > 0;
         ?>
         <div id="dgw-stripe-pay" class="dgw-thankyou-waiter">
-            <div class="dgw-thankyou-card dgw-state-pending">
-                <h3 class="dgw-thankyou-title" style="margin-bottom:8px;">Complete your card payment</h3>
-                <p class="dgw-thankyou-subtitle">Enter your card details below. Your data goes directly to Stripe — it never touches this site.</p>
+            <div class="dgw-thankyou-card dgw-card-left dgw-state-pending">
+                <div class="dgw-stripe-section">
+                    <h3 class="dgw-stripe-section-title">Complete your card payment</h3>
+                    <p class="dgw-stripe-section-sub">Enter your card details below. Your data goes directly to Stripe — it never touches this site.</p>
 
-                <div class="dgw-thankyou-countdown" style="text-align:left;">
-                    <span class="dgw-thankyou-countdown-label">Charged on your card</span>
-                    <span class="dgw-thankyou-countdown-value" style="font-size:26px;">
-                        <?php echo esc_html(strtoupper($stripeCurrency) . ' ' . number_format($stripeAmount, 2)); ?>
-                    </span>
-                    <?php if (!empty($shopCurrency) && strtoupper($shopCurrency) !== strtoupper($stripeCurrency) && $shopAmount > 0): ?>
-                    <p style="margin:6px 0 0;font-size:12px;color:#9ca3af;">
-                        &asymp; <?php echo esc_html(strtoupper($shopCurrency) . ' ' . number_format($shopAmount, 0)); ?>
-                        at <?php echo esc_html(strtoupper($shopCurrency) . ' ' . number_format($rate, 0)); ?> per 1 <?php echo esc_html(strtoupper($stripeCurrency)); ?>
-                    </p>
-                    <?php endif; ?>
-                </div>
+                    <div class="dgw-stripe-amount-card">
+                        <div>
+                            <span class="dgw-stripe-amount-label">You&rsquo;ll be charged</span>
+                            <span class="dgw-stripe-amount-value">
+                                <?php echo esc_html(strtoupper($stripeCurrency) . ' ' . number_format($stripeAmount, 2)); ?>
+                            </span>
+                            <?php if ($showFx): ?>
+                                <p class="dgw-stripe-amount-fx">
+                                    &asymp; <?php echo esc_html(strtoupper($shopCurrency) . ' ' . number_format($shopAmount, 0)); ?>
+                                    &nbsp;&middot;&nbsp; <?php echo esc_html(strtoupper($shopCurrency) . ' ' . number_format($rate, 0)); ?> per 1 <?php echo esc_html(strtoupper($stripeCurrency)); ?>
+                                </p>
+                            <?php endif; ?>
+                        </div>
+                        <span class="dgw-stripe-amount-badge">Card</span>
+                    </div>
 
-                <!-- Stripe Elements mounts here -->
-                <div id="dgw-stripe-element" style="background:#0d0d14;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin-bottom:14px;min-height:80px;"></div>
+                    <div id="dgw-stripe-error" class="dgw-stripe-error"></div>
 
-                <div id="dgw-stripe-error" class="dgw-stripe-error" style="display:none;color:#ef4444;font-size:13px;margin-bottom:12px;text-align:left;"></div>
+                    <div class="dgw-stripe-element-wrap">
+                        <div id="dgw-stripe-element"></div>
+                    </div>
 
-                <div class="dgw-thankyou-actions">
-                    <button type="button" id="dgw-stripe-pay-btn" class="dgw-thankyou-btn dgw-thankyou-btn-retry" style="background:#635bff;border-color:#635bff;">
+                    <button type="button" id="dgw-stripe-pay-btn" class="dgw-thankyou-btn dgw-thankyou-btn-pay">
+                        <svg class="dgw-pay-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-7a2 2 0 00-2-2H6a2 2 0 00-2 2v7a2 2 0 002 2zm10-11V7a4 4 0 00-8 0v4h8z"/></svg>
                         Pay <?php echo esc_html(strtoupper($stripeCurrency) . ' ' . number_format($stripeAmount, 2)); ?>
                     </button>
-                    <a class="dgw-thankyou-btn dgw-thankyou-btn-back" href="<?php echo esc_url($shopUrl); ?>">Back</a>
+
+                    <div style="display:grid;grid-template-columns:1fr;gap:10px;margin-top:12px;">
+                        <a class="dgw-thankyou-btn dgw-thankyou-btn-back" href="<?php echo esc_url($shopUrl); ?>">Back to shop</a>
+                    </div>
+
+                    <div class="dgw-stripe-secured">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 11c0-1.5-.5-3-3-3s-3 1.5-3 3v4m6 0v-4c0-1.5.5-3 3-3s3 1.5 3 3v4M5 11h14a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2z"/></svg>
+                        <span>Secured by Stripe</span>
+                        <span class="dgw-stripe-secured-dot"></span>
+                        <span>3D Secure supported</span>
+                        <span class="dgw-stripe-secured-dot"></span>
+                        <span>We never store your card</span>
+                    </div>
+                    <p class="dgw-thankyou-ref" style="text-align:center;margin-top:14px;">Ref: <?php echo esc_html($reference); ?></p>
                 </div>
-
-                <p class="dgw-thankyou-ref">Ref: <?php echo esc_html($reference); ?></p>
             </div>
-
-            <p class="dgw-thankyou-hint">
-                Secured by Stripe · 3D Secure supported · we never store your card.
-            </p>
         </div>
 
         <script src="https://js.stripe.com/v3/"></script>
@@ -1028,18 +1092,33 @@ JS;
                 if (errBox) errBox.style.display = 'none';
             }
 
-            // Initialise Stripe + mount Elements.
+            // Initialise Stripe + mount Elements. Light "stripe" theme
+            // by default; Stripe auto-adapts when the host page is dark
+            // via the OS / browser theme. We override only the brand
+            // primary so the focus / link colours match the rest of
+            // our chrome.
+            var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
             var stripe, elements;
             try {
                 stripe = window.Stripe(stripeKey);
                 elements = stripe.elements({
                     clientSecret: clientSecret,
                     appearance: {
-                        theme: 'night',
-                        variables: { colorPrimary: '#635bff', colorBackground: '#0d0d14', colorText: '#e5e7eb' },
+                        theme: prefersDark ? 'night' : 'stripe',
+                        variables: {
+                            colorPrimary: '#635bff',
+                            borderRadius: '10px',
+                            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                            spacingUnit: '4px',
+                        },
+                        rules: {
+                            '.Input': { padding: '12px 14px', fontSize: '14px' },
+                            '.Label': { fontSize: '12px', fontWeight: '600', letterSpacing: '0.02em' },
+                            '.Tab':   { borderRadius: '10px' },
+                        },
                     },
                 });
-                var paymentEl = elements.create('payment');
+                var paymentEl = elements.create('payment', { layout: { type: 'tabs', defaultCollapsed: false } });
                 paymentEl.mount('#dgw-stripe-element');
             } catch (e) {
                 showError('Could not load the card form. Please refresh the page.');
@@ -1074,6 +1153,7 @@ JS;
             });
 
             function renderProcessing() {
+                card.classList.remove('dgw-card-left'); // re-centre the layout
                 card.innerHTML = ''
                     + '<div class="dgw-thankyou-spinner-wrap"><div class="dgw-thankyou-spinner"></div></div>'
                     + '<h3 class="dgw-thankyou-title">Confirming your payment…</h3>'
@@ -1082,6 +1162,7 @@ JS;
             }
 
             function renderTerminal(status) {
+                card.classList.remove('dgw-card-left');
                 var titles = { completed: 'Payment Successful!', failed: 'Payment Failed', expired: 'Payment Verification Slow' };
                 var msgs = {
                     completed: 'Your card was charged and the order is confirmed. Refreshing your order…',
