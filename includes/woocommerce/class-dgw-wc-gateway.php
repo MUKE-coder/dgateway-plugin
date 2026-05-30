@@ -514,10 +514,27 @@ JS;
         $order->update_meta_data('_dgw_reference', $reference);
         $order->update_meta_data('_dgw_provider', $provider);
         $order->update_meta_data('_dgw_method', $method);
-        if ($provider === 'stripe' && $currency !== $providerCurrency) {
-            $order->update_meta_data('_dgw_stripe_amount', $providerAmount);
-            $order->update_meta_data('_dgw_stripe_currency', $providerCurrency);
-            $order->update_meta_data('_dgw_exchange_rate', floatval($this->get_option('usd_exchange_rate', '0')));
+        if ($provider === 'stripe') {
+            // Persist the Stripe handoff so the thank-you page can
+            // mount Elements server-side instead of depending on the
+            // jQuery ajaxComplete intercept (which fires AFTER WC's
+            // own redirect handler on most themes and silently
+            // dropped the Stripe flow into the MoMo waiting UI). The
+            // client_secret is intended to be exposed to the browser
+            // by Stripe's own design; storing it on the order is
+            // safe and lets us survive page reloads on the thank-you
+            // step.
+            $order->update_meta_data('_dgw_client_secret', $data['client_secret'] ?? '');
+            $order->update_meta_data('_dgw_stripe_key', $data['stripe_publishable_key'] ?? '');
+            $order->update_meta_data('_dgw_amount', $providerAmount);
+            $order->update_meta_data('_dgw_currency', $providerCurrency);
+            if ($currency !== $providerCurrency) {
+                $order->update_meta_data('_dgw_stripe_amount', $providerAmount);
+                $order->update_meta_data('_dgw_stripe_currency', $providerCurrency);
+                $order->update_meta_data('_dgw_shop_amount', (float) $amount);
+                $order->update_meta_data('_dgw_shop_currency', $currency);
+                $order->update_meta_data('_dgw_exchange_rate', floatval($this->get_option('usd_exchange_rate', '0')));
+            }
         }
         $order->save();
 
@@ -614,6 +631,20 @@ JS;
         wp_enqueue_script('dgw-checkout');
         $checkoutUrl = function_exists('wc_get_checkout_url') ? wc_get_checkout_url() : home_url('/');
         $shopUrl = function_exists('wc_get_page_permalink') ? wc_get_page_permalink('shop') : home_url('/');
+
+        // Card flow needs an entirely different UI — render the Stripe
+        // Elements form here instead of the mobile-money waiting card.
+        // This was the bug JB reported: regardless of selected method
+        // the thank-you page always showed the MoMo "we sent a prompt
+        // to your phone" UI because the JS intercept that was meant
+        // to open a separate Stripe modal lost the race against WC's
+        // built-in redirect handler on most themes. Doing it
+        // server-side from order meta is bullet-proof.
+        $method = $order->get_meta('_dgw_method');
+        if ($method === 'card') {
+            $this->thankyou_stripe_ui($order, $reference, $shopUrl, $checkoutUrl);
+            return;
+        }
         ?>
         <div id="dgw-payment-polling" class="dgw-thankyou-waiter" data-ref="<?php echo esc_attr($reference); ?>">
             <div class="dgw-thankyou-card dgw-state-pending">
@@ -901,6 +932,213 @@ JS;
             .dgw-thankyou-btn-keep { background:#374151; color:#e5e7eb; border-color:rgba(255,255,255,0.12); }
         }
         </style>
+        <?php
+    }
+
+    /**
+     * Render the Stripe Elements card form on the thank-you page.
+     *
+     * Used when the buyer picked Card at checkout. We loaded a Stripe
+     * publishable key + client_secret from the order meta — Stripe.js
+     * mounts a PaymentElement, the buyer enters their card, and on
+     * confirmation we poll the same /verify endpoint as MoMo to wait
+     * for the webhook to land. If they leave the page before paying,
+     * the on-hold order stays on-hold and can be retried by re-visiting
+     * the order page (the form re-mounts cleanly because everything we
+     * need is in order meta).
+     */
+    private function thankyou_stripe_ui(\WC_Order $order, string $reference, string $shopUrl, string $checkoutUrl) {
+        $clientSecret = $order->get_meta('_dgw_client_secret');
+        $stripeKey    = $order->get_meta('_dgw_stripe_key');
+        $shopAmount   = (float) $order->get_meta('_dgw_shop_amount');
+        $shopCurrency = $order->get_meta('_dgw_shop_currency');
+        $stripeAmount = (float) ($order->get_meta('_dgw_stripe_amount') ?: $order->get_meta('_dgw_amount') ?: 0);
+        $stripeCurrency = $order->get_meta('_dgw_stripe_currency') ?: $order->get_meta('_dgw_currency') ?: $order->get_currency();
+        $rate         = floatval($order->get_meta('_dgw_exchange_rate'));
+
+        // If Stripe data is missing the order was probably created
+        // before the v1.1.0 storage change — fall back to a friendly
+        // "contact support" message rather than rendering a broken
+        // form with no client_secret.
+        if (empty($clientSecret) || empty($stripeKey)) {
+            echo '<div class="dgw-thankyou-waiter"><div class="dgw-thankyou-card"><h3 class="dgw-thankyou-title">Card details unavailable</h3><p class="dgw-thankyou-subtitle">We couldn\'t load the card form for this order. Please <a href="' . esc_url($checkoutUrl) . '">restart checkout</a> or contact the seller.</p></div></div>';
+            return;
+        }
+        ?>
+        <div id="dgw-stripe-pay" class="dgw-thankyou-waiter">
+            <div class="dgw-thankyou-card dgw-state-pending">
+                <h3 class="dgw-thankyou-title" style="margin-bottom:8px;">Complete your card payment</h3>
+                <p class="dgw-thankyou-subtitle">Enter your card details below. Your data goes directly to Stripe — it never touches this site.</p>
+
+                <div class="dgw-thankyou-countdown" style="text-align:left;">
+                    <span class="dgw-thankyou-countdown-label">Charged on your card</span>
+                    <span class="dgw-thankyou-countdown-value" style="font-size:26px;">
+                        <?php echo esc_html(strtoupper($stripeCurrency) . ' ' . number_format($stripeAmount, 2)); ?>
+                    </span>
+                    <?php if (!empty($shopCurrency) && strtoupper($shopCurrency) !== strtoupper($stripeCurrency) && $shopAmount > 0): ?>
+                    <p style="margin:6px 0 0;font-size:12px;color:#9ca3af;">
+                        &asymp; <?php echo esc_html(strtoupper($shopCurrency) . ' ' . number_format($shopAmount, 0)); ?>
+                        at <?php echo esc_html(strtoupper($shopCurrency) . ' ' . number_format($rate, 0)); ?> per 1 <?php echo esc_html(strtoupper($stripeCurrency)); ?>
+                    </p>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Stripe Elements mounts here -->
+                <div id="dgw-stripe-element" style="background:#0d0d14;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin-bottom:14px;min-height:80px;"></div>
+
+                <div id="dgw-stripe-error" class="dgw-stripe-error" style="display:none;color:#ef4444;font-size:13px;margin-bottom:12px;text-align:left;"></div>
+
+                <div class="dgw-thankyou-actions">
+                    <button type="button" id="dgw-stripe-pay-btn" class="dgw-thankyou-btn dgw-thankyou-btn-retry" style="background:#635bff;border-color:#635bff;">
+                        Pay <?php echo esc_html(strtoupper($stripeCurrency) . ' ' . number_format($stripeAmount, 2)); ?>
+                    </button>
+                    <a class="dgw-thankyou-btn dgw-thankyou-btn-back" href="<?php echo esc_url($shopUrl); ?>">Back</a>
+                </div>
+
+                <p class="dgw-thankyou-ref">Ref: <?php echo esc_html($reference); ?></p>
+            </div>
+
+            <p class="dgw-thankyou-hint">
+                Secured by Stripe · 3D Secure supported · we never store your card.
+            </p>
+        </div>
+
+        <script src="https://js.stripe.com/v3/"></script>
+        <script>
+        (function() {
+            var ref = <?php echo wp_json_encode($reference); ?>;
+            var stripeKey = <?php echo wp_json_encode($stripeKey); ?>;
+            var clientSecret = <?php echo wp_json_encode($clientSecret); ?>;
+            var verifyUrl = <?php echo wp_json_encode(esc_url_raw(rest_url('dgateway/v1/verify'))); ?>;
+            var nonce = <?php echo wp_json_encode(wp_create_nonce('wp_rest')); ?>;
+            var shopUrl = <?php echo wp_json_encode(esc_url_raw($shopUrl)); ?>;
+            var checkoutUrl = <?php echo wp_json_encode(esc_url_raw($checkoutUrl)); ?>;
+
+            var root = document.getElementById('dgw-stripe-pay');
+            var payBtn = document.getElementById('dgw-stripe-pay-btn');
+            var errBox = document.getElementById('dgw-stripe-error');
+            var card = root.querySelector('.dgw-thankyou-card');
+
+            function showError(msg) {
+                if (!errBox) return;
+                errBox.textContent = msg || 'Something went wrong.';
+                errBox.style.display = 'block';
+            }
+            function clearError() {
+                if (errBox) errBox.style.display = 'none';
+            }
+
+            // Initialise Stripe + mount Elements.
+            var stripe, elements;
+            try {
+                stripe = window.Stripe(stripeKey);
+                elements = stripe.elements({
+                    clientSecret: clientSecret,
+                    appearance: {
+                        theme: 'night',
+                        variables: { colorPrimary: '#635bff', colorBackground: '#0d0d14', colorText: '#e5e7eb' },
+                    },
+                });
+                var paymentEl = elements.create('payment');
+                paymentEl.mount('#dgw-stripe-element');
+            } catch (e) {
+                showError('Could not load the card form. Please refresh the page.');
+                return;
+            }
+
+            payBtn.addEventListener('click', function() {
+                clearError();
+                payBtn.disabled = true;
+                var originalText = payBtn.textContent;
+                payBtn.textContent = 'Processing…';
+
+                stripe.confirmPayment({
+                    elements: elements,
+                    redirect: 'if_required',
+                }).then(function(result) {
+                    if (result.error) {
+                        showError(result.error.message || 'Card payment failed.');
+                        payBtn.disabled = false;
+                        payBtn.textContent = originalText;
+                        return;
+                    }
+                    // Stripe accepted the payment — poll our verify endpoint until
+                    // the webhook lands and the order flips to paid.
+                    renderProcessing();
+                    pollStatus();
+                }).catch(function(err) {
+                    showError(err.message || 'Card payment failed.');
+                    payBtn.disabled = false;
+                    payBtn.textContent = originalText;
+                });
+            });
+
+            function renderProcessing() {
+                card.innerHTML = ''
+                    + '<div class="dgw-thankyou-spinner-wrap"><div class="dgw-thankyou-spinner"></div></div>'
+                    + '<h3 class="dgw-thankyou-title">Confirming your payment…</h3>'
+                    + '<p class="dgw-thankyou-subtitle">Your card was authorised. We&#39;re waiting on Stripe&#39;s final confirmation.</p>'
+                    + '<p class="dgw-thankyou-ref">Ref: ' + ref + '</p>';
+            }
+
+            function renderTerminal(status) {
+                var titles = { completed: 'Payment Successful!', failed: 'Payment Failed', expired: 'Payment Verification Slow' };
+                var msgs = {
+                    completed: 'Your card was charged and the order is confirmed. Refreshing your order…',
+                    failed:    "Stripe couldn&#39;t complete the charge. No money was taken. Please try again.",
+                    expired:   "We didn&#39;t see Stripe&#39;s confirmation yet — sometimes it takes another minute. If your card statement shows a charge, the order will update automatically.",
+                };
+                card.innerHTML = ''
+                    + '<div class="dgw-thankyou-spinner-wrap ' + (status === 'completed' ? 'dgw-success' : 'dgw-failed') + '">'
+                    +   (status === 'completed'
+                        ? '<svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>'
+                        : '<svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>'
+                       )
+                    + '</div>'
+                    + '<h3 class="dgw-thankyou-title">' + titles[status] + '</h3>'
+                    + '<p class="dgw-thankyou-subtitle">' + msgs[status] + '</p>'
+                    + '<p class="dgw-thankyou-ref">Ref: ' + ref + '</p>'
+                    + (status === 'completed' ? ''
+                        : '<div class="dgw-thankyou-actions dgw-thankyou-actions-terminal">'
+                          + '<a class="dgw-thankyou-btn dgw-thankyou-btn-retry" href="' + checkoutUrl + '">Try Again</a>'
+                          + '<a class="dgw-thankyou-btn dgw-thankyou-btn-back" href="' + shopUrl + '">Back to Shop</a>'
+                        + '</div>');
+                if (status === 'completed') setTimeout(function () { window.location.reload(); }, 1500);
+            }
+
+            function pollStatus() {
+                // Reuse the same smart cadence we use for MoMo — 6 polls
+                // across 120s. Most Stripe webhooks land in under 5s
+                // but card networks occasionally take a beat.
+                var intervals = [5, 10, 15, 20, 30, 40];
+                var idx = 0;
+                var stopped = false;
+
+                function go() {
+                    if (stopped || idx >= intervals.length) {
+                        if (!stopped) renderTerminal('expired');
+                        return;
+                    }
+                    setTimeout(function() {
+                        fetch(verifyUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': nonce },
+                            body: JSON.stringify({ reference: ref })
+                        })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            var s = data && data.data && data.data.status;
+                            if (s === 'completed') { stopped = true; renderTerminal('completed'); return; }
+                            if (s === 'failed')    { stopped = true; renderTerminal('failed'); return; }
+                            idx++; go();
+                        })
+                        .catch(function() { idx++; go(); });
+                    }, intervals[idx] * 1000);
+                }
+                go();
+            }
+        })();
+        </script>
         <?php
     }
 
