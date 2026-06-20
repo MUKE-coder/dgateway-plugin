@@ -3,7 +3,7 @@
  * Plugin Name: DGateway Payment Gateway
  * Plugin URI: https://dgatewayapi.desispay.com
  * Description: Accept Mobile Money and Card payments via DGateway. Works standalone or with WooCommerce.
- * Version: 1.1.3
+ * Version: 1.1.4
  * Author: DesisPay
  * Author URI: https://desispay.com
  * License: GPL-2.0-or-later
@@ -12,11 +12,12 @@
  * Requires PHP: 7.4
  * WC requires at least: 5.0
  * WC tested up to: 9.0
+ * Update URI: https://dgatewayapi.desispay.com/v1/wordpress-plugin/update
  */
 
 defined('ABSPATH') || exit;
 
-define('DGW_VERSION', '1.1.3');
+define('DGW_VERSION', '1.1.4');
 define('DGW_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('DGW_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('DGW_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -35,6 +36,7 @@ spl_autoload_register(function ($class) {
         'DGW_Webhook_Handler' => 'includes/class-dgw-webhook-handler.php',
         'DGW_Shortcodes'      => 'includes/class-dgw-shortcodes.php',
         'DGW_Admin'           => 'includes/class-dgw-admin.php',
+        'DGW_Updater'         => 'includes/class-dgw-updater.php',
         'DGW_WC_Gateway'                 => 'includes/woocommerce/class-dgw-wc-gateway.php',
         'DGW_WC_Subscription_Product'    => 'includes/woocommerce/class-dgw-wc-subscription-product.php',
         'DGW_WC_Blocks_Integration'      => 'includes/woocommerce/class-dgw-wc-blocks-integration.php',
@@ -117,5 +119,13 @@ function dgw_init() {
         return;
     }
     DGW_Plugin::instance();
+
+    // Mount the auto-updater. Runs on every page load (cheap — only the
+    // remote check is throttled, and that's cached for 12h via transients).
+    // Without this, customers stay on whatever version they first installed
+    // forever, with no in-WP signal that updates exist.
+    if (class_exists('DGW_Updater')) {
+        new DGW_Updater();
+    }
 }
 add_action('plugins_loaded', 'dgw_init');
