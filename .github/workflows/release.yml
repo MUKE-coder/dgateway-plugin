@@ -1,0 +1,126 @@
+name: Release plugin zip
+
+# Trigger: a `v*` tag pushed to the repo.
+#
+# JB's release flow becomes:
+#   1. Bump `Version:` in dgateway.php and `Stable tag:` in readme.txt.
+#   2. Commit + push to main.
+#   3. git tag v1.1.5 && git push origin v1.1.5
+#
+# That's it. This workflow then:
+#   - Verifies the tag matches the plugin header (refuses mismatched releases).
+#   - Builds dgateway-plugin-v1.1.5.zip with the same flat structure past
+#     releases used (so DGW_Updater::fix_source_dir still does the right thing).
+#   - Creates the GitHub release with auto-generated notes from commits since
+#     the previous release.
+#
+# The Go endpoint at dgatewayapi.desispay.com/v1/wordpress-plugin/update
+# polls /releases/latest on this repo, so any non-prerelease release published
+# here automatically flows to every customer's WP admin within ~13h
+# (1h Go-side Redis cache + 12h WP-side transient cache).
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  # gh release create needs write access to publish a release.
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse tag + decide prerelease
+        id: ver
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          # Strict X.Y.Z → real release; anything else (rc1, beta, alpha,
+          # etc.) is a prerelease so GitHub's /releases/latest pointer
+          # doesn't accidentally ship it to every customer.
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=true"  >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify dgateway.php Version matches tag
+        run: |
+          set -euo pipefail
+          FILE_VERSION=$(grep -oP '(?<=^ \* Version:\s)[0-9][0-9A-Za-z.\-]*' dgateway.php | head -1)
+          if [ -z "$FILE_VERSION" ]; then
+            echo "::error::Could not parse 'Version:' header in dgateway.php"
+            exit 1
+          fi
+          if [ "$FILE_VERSION" != "${{ steps.ver.outputs.version }}" ]; then
+            echo "::error::Tag v${{ steps.ver.outputs.version }} does not match dgateway.php Version: $FILE_VERSION. Bump the plugin header before tagging."
+            exit 1
+          fi
+          # Also check the DGW_VERSION constant — they have to move together
+          # or the in-PHP version comparison breaks on the customer side.
+          CONST_VERSION=$(grep -oP "(?<=DGW_VERSION', ')[0-9][0-9A-Za-z.\-]*" dgateway.php | head -1)
+          if [ "$CONST_VERSION" != "${{ steps.ver.outputs.version }}" ]; then
+            echo "::error::DGW_VERSION constant is $CONST_VERSION but tag is ${{ steps.ver.outputs.version }}. Both must match the Version header."
+            exit 1
+          fi
+          echo "✓ dgateway.php Version + DGW_VERSION both match $FILE_VERSION"
+
+      - name: Check readme.txt Stable tag (warn only)
+        run: |
+          set -euo pipefail
+          README_VERSION=$(grep -oP '(?<=^Stable tag:\s)[0-9][0-9A-Za-z.\-]*' readme.txt | head -1 || true)
+          if [ -z "$README_VERSION" ]; then
+            echo "::warning::Could not parse 'Stable tag:' from readme.txt"
+          elif [ "$README_VERSION" != "${{ steps.ver.outputs.version }}" ]; then
+            echo "::warning::readme.txt Stable tag is $README_VERSION but tag is ${{ steps.ver.outputs.version }} — consider bumping for wordpress.org-style consistency."
+          else
+            echo "✓ readme.txt Stable tag matches"
+          fi
+
+      - name: Build zip (flat structure)
+        run: |
+          set -euo pipefail
+          ZIP="dgateway-plugin-${{ steps.ver.outputs.tag }}.zip"
+          # `git archive --format=zip HEAD` produces the same flat layout
+          # past releases used (assets/, includes/, dgateway.php at the
+          # root — no top-level folder). DGW_Updater::fix_source_dir on the
+          # plugin side renames the extracted folder to the right slug at
+          # install time, so this layout is correct.
+          git archive --format=zip --output="$ZIP" HEAD
+          ls -la "$ZIP"
+          echo "--- top-level entries ---"
+          unzip -l "$ZIP" | head -25
+
+      - name: Publish (or update) GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.ver.outputs.tag }}"
+          ZIP="dgateway-plugin-${TAG}.zip"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — replacing the zip asset."
+            gh release upload "$TAG" "$ZIP" --clobber
+          else
+            FLAGS=()
+            if [ "${{ steps.ver.outputs.prerelease }}" = "true" ]; then
+              FLAGS+=(--prerelease)
+              echo "Tag $TAG is not strict X.Y.Z → publishing as prerelease (won't be served by /releases/latest)."
+            fi
+            # --generate-notes builds a changelog from PRs + commits since
+            # the previous release. JB can edit the release body afterwards
+            # on github.com if he wants a polished narrative.
+            gh release create "$TAG" "$ZIP" \
+              --title "$TAG" \
+              --generate-notes \
+              "${FLAGS[@]}"
+          fi
