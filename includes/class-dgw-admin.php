@@ -50,6 +50,7 @@ class DGW_Admin {
     public function register_settings() {
         register_setting('dgw_settings', 'dgw_api_url', ['sanitize_callback' => 'esc_url_raw']);
         register_setting('dgw_settings', 'dgw_api_key', ['sanitize_callback' => 'sanitize_text_field']);
+        register_setting('dgw_settings', 'dgw_webhook_secret', ['sanitize_callback' => 'sanitize_text_field']);
         register_setting('dgw_settings', 'dgw_default_currency', ['sanitize_callback' => 'sanitize_text_field']);
     }
 

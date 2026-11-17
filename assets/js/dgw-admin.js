@@ -25,9 +25,9 @@
         })
         .done(function (res) {
             if (res.success) {
-                $result.html('<span class="dgw-notice dgw-notice--success" style="display:inline-block">' + res.data.message + '</span>');
+                $result.html('<span class="dgw-notice dgw-notice--success" style="display:inline-block">' + escHtml(res.data.message) + '</span>');
             } else {
-                $result.html('<span class="dgw-notice dgw-notice--error" style="display:inline-block">' + (res.data.message || 'Connection failed') + '</span>');
+                $result.html('<span class="dgw-notice dgw-notice--error" style="display:inline-block">' + escHtml(res.data.message || 'Connection failed') + '</span>');
             }
         })
         .fail(function () {

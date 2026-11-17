@@ -117,7 +117,7 @@
             if (!cfg._isSubscribe) {
                 amountDisplay = '<div class="dgw-modal-amount">' +
                     '<span class="dgw-modal-amount-label">Amount</span>' +
-                    '<span class="dgw-modal-amount-value">' + currency + ' ' + this._formatNumber(amount) + '</span>' +
+                    '<span class="dgw-modal-amount-value">' + this._escHtml(currency) + ' ' + this._formatNumber(amount) + '</span>' +
                     '</div>';
             }
 
@@ -341,8 +341,9 @@
             if (doneBtn) {
                 doneBtn.addEventListener('click', function () {
                     self.close();
-                    if (self._config.successUrl) {
-                        window.location.href = self._config.successUrl;
+                    var successUrl = self._safeRedirectUrl(self._config.successUrl);
+                    if (successUrl) {
+                        window.location.href = successUrl;
                     }
                 });
             }
@@ -608,6 +609,7 @@
             var xhr = new XMLHttpRequest();
             xhr.open('POST', restUrl + 'subscribe');
             xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.setRequestHeader('X-WP-Nonce', dgwCheckout.nonce);
             xhr.onload = function () {
                 try {
                     var data = JSON.parse(xhr.responseText);
@@ -696,6 +698,16 @@
 
         _formatNumber: function (n) {
             return parseFloat(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        },
+
+        _safeRedirectUrl: function (value) {
+            if (!value) return '';
+            try {
+                var url = new URL(value, window.location.href);
+                return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : '';
+            } catch (e) {
+                return '';
+            }
         },
 
         _escHtml: function (str) {

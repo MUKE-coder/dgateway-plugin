@@ -31,7 +31,7 @@
    Option A — Symlink (recommended for active development):
    ```bash
    # Windows (run as Administrator)
-   mklink /D "C:\path\to\wordpress\wp-content\plugins\dgateway" "D:\Projects\GO DGATEWAY\dgateway-plugin"
+   mklink /D "C:\path\to\wordpress\wp-content\plugins\dgateway" "D:\path\to\dgateway-plugin"
 
    # macOS / Linux
    ln -s /path/to/dgateway-plugin /path/to/wordpress/wp-content/plugins/dgateway
@@ -51,6 +51,7 @@
    Go to DGateway → Settings and enter:
    - API URL: `https://dgatewayapi.desispay.com` (or your local DGateway API URL)
    - API Key: Your app's API key from the DGateway dashboard
+   - Webhook Secret: Your app's webhook signing secret from the DGateway dashboard (must match exactly)
    - Default Currency: `UGX` (or your preferred currency)
 
 ### Testing Scenarios
@@ -115,9 +116,10 @@
 2. Copy the ngrok URL (e.g., https://abc123.ngrok.io)
 3. In DGateway dashboard, set your app's webhook URL to:
    https://abc123.ngrok.io/wp-json/dgateway/v1/webhook
-4. Make a test payment
-5. Check that the webhook updates the WooCommerce order status
-6. Check WordPress debug.log for webhook processing logs
+4. Copy the app's webhook secret from DGateway into DGateway → Settings → Webhook Secret
+5. Make a test payment
+6. Check that the signed webhook updates the WooCommerce order status
+7. Check WordPress debug.log for webhook processing logs
 ```
 
 ### Debugging
@@ -312,3 +314,56 @@ If you don't want to go through WordPress.org review, you can distribute directl
 
 3. **Auto-updates from GitHub** (optional)
    Use the [Plugin Update Checker](https://github.com/YahniS/plugin-update-checker) library to enable auto-updates from your GitHub releases.
+
+## Security review and proposed fixes
+
+Reviewed plugin version 1.1.4 at commit `c0e7bbd` on 2026-11-16. The review covers PHP entry points, REST routes, administrator AJAX actions, frontend scripts, templates, WooCommerce order changes, API requests, update handling, and the release workflow. This is a source review with isolated regression tests; it does not establish the security of the DGateway service or a deployed WordPress installation. No live payments or requests against a merchant installation were made.
+
+### Findings addressed in this patch
+
+1. **Critical: unauthenticated webhook order changes and integration events.** `DGW_Webhook_Handler::handle()` previously trusted JSON before any authentication. An unauthenticated sender knowing a pending order's `_dgw_reference` could submit `{"reference":"<that-reference>","status":"completed"}` to `/wp-json/dgateway/v1/webhook` and trigger `payment_complete()` without a payment. `failed` could also alter orders, and arbitrary `subscription.*` events reached custom hooks without authentication. The payment reference is exposed to the purchaser during checkout; guessing references is unnecessary for a purchaser attacking their own order. The patch requires a hex HMAC-SHA256 `X-DGateway-Signature` over the exact raw body and uses `hash_equals()` before parsing, lookup, logging payload values, or dispatching actions. Missing configuration returns 503; missing/invalid signatures return 401. Signed malformed payloads return 400. Both payment and subscription events use the same authentication gate. This follows [DGateway's documented webhook protocol](https://dgateway.desispay.com/docs/getting-started/accept-your-first-payment).
+
+2. **High: stored script injection through shortcode currency and success URL.** Shortcode attributes were escaped in the initial HTML, but the browser decoded the currency data attribute and concatenated it into modal `innerHTML`. A content author able to save a shortcode could use `[dgw_pay_button amount="100" currency="&lt;img src=x onerror=alert(document.domain)&gt;"]`. The entity-encoded payload survives HTML tag filtering and is decoded when read from the HTML attribute. Opening the button's modal created executable markup for the viewer. Content publication permissions and a viewer clicking the button are prerequisites; role-specific post filtering still needs validation in WordPress. The patch escapes currency at the final DOM sink. It also rejects executable redirect schemes such as `javascript:` in shortcode success URLs before navigation after a completed payment. Normal HTTP(S) and relative success URLs still work.
+
+3. **Medium: public verification returns the merchant API's entire transaction response.** Anyone with a transaction reference could submit it to `/verify` and receive every upstream field. The route did not check transaction ownership, and the nonce callback always returned true. Whether customer data, metadata, or provider secrets were disclosed depends on the upstream response; no production response containing those fields was obtained. The patch allows only reference and normalized polling status through, preserving the frontend's `data.status` contract. Polling remains public to support guests, and a reference holder can still learn its status. Upstream errors are still returned, so they should contain no sensitive details.
+
+4. **Medium: failure notifications can downgrade paid orders.** Both webhook handling and status polling previously changed any order whose status was not already `failed` to `failed`, including paid orders. With the original unsigned webhook, an attacker knowing a reference could directly exploit this. Signed delayed events or stale upstream results could also cause the transition. The patch permits failure only for unpaid `pending` or `on-hold` DGateway orders with no paid date, and ignores orders using other payment methods. Repeated completion notifications do not repeat payment completion for an already paid order.
+
+The patch also removes the unconditional success path from nonce verification, sends the nonce from subscription requests, and escapes upstream connection-test messages in the administrator UI. The latter is defensive hardening: an attacker-controlled upstream message source was not demonstrated. A guest WordPress nonce is publicly obtainable and is **not authorization or a bot defense**, as explained in [WordPress's nonce guidance](https://developer.wordpress.org/apis/security/nonces/). No claim of abuse prevention is made for this change.
+
+### Upgrade and compatibility
+
+- Before relying on webhook delivery, set **DGateway → Settings → Webhook Secret** to the secret for the same DGateway app as the API key. Previously installed sites may hold a random locally generated value; it is preserved, but must be replaced unless it already matches the app secret. New installations start with an empty value. Never put this secret in public JavaScript or the webhook URL.
+- Test a provider-signed webhook after saving the secret. Unsigned callbacks are deliberately rejected, including subscription callbacks. Existing custom callers of checkout, verify, or subscribe must now supply the frontend `X-WP-Nonce`; cached pages may need refreshing.
+- Integrations reading additional fields from the public `/verify` response must switch to a server-side authenticated API call. Public polling returns only `data.reference` and `data.status`; unfamiliar statuses appear as `pending` while polling waits for a terminal state.
+- HMAC authenticates origin and integrity, but the documented signature has no timestamp. It cannot prove freshness. Paid-order completion is idempotent and late failures cannot downgrade paid orders; custom action consumers must independently deduplicate events before side effects. Durable event deduplication requires a provider event ID/freshness contract.
+
+### Validation
+
+Run from the repository root:
+
+```bash
+php tests/security.php
+node tests/security.js
+```
+
+The dependency-free PHP harness stubs WordPress and WooCommerce and tests the real handler/REST classes without making HTTP requests. It covers invalid and absent signatures, missing secrets, tampered raw bytes, wrong secrets, signed payment/subscription events, duplicate completion, malformed payloads, both failure-update paths, cross-gateway isolation, response filtering, invalid references, and nonce rejection. The Node harness exercises modal HTML generation, URL validation, and the administrator's actual AJAX message handler with a minimal DOM/jQuery stub. These tests do not replace real browser or WooCommerce integration testing.
+
+Before releasing, test guest and logged-in shortcode payments/subscriptions, classic and Blocks checkout, Mobile Money and Stripe, signed completion/failure callbacks, and HPOS enabled/disabled on a staging store. Confirm the signing secret migration and any custom webhook consumers. PHP 7.4 compatibility and a real WordPress/WooCommerce runtime were not executed locally; local validation used PHP 8.5 and Node 22.
+
+### Remaining design risks and proposed follow-up work
+
+- Public checkout/subscription endpoints allow visitors to initiate merchant API calls using arbitrary amounts, providers, phone numbers, or plan IDs. The repository contains no rate limiter despite the old permission callback's comment. Enforce request limits at the reverse proxy/WAF, and design server-issued checkout intents bound to published prices, currency, allowed plans/providers, and permitted metadata. Guest nonces do not solve this. Standalone product prices can currently be altered in the request; the built-in WooCommerce flow independently uses the order total and does not use the public checkout request to set its order reference. No WooCommerce underpayment exploit through the public checkout route was established.
+- Subscription checkout treats a response lacking `transaction_reference` as a free trial and selects one subscription plan for the order. Require an explicit validated trial state and define mixed-cart/quantity billing semantics before relying on this flow for fulfillment. The subscription product currently maps to `WC_Product_Simple`, so the intended `dgw_subscription` runtime type also needs functional validation; an exploitable trial bypass was not established.
+- The configurable API URL accepts HTTP and the HTTP client follows redirects by default. Require HTTPS for production credentials and review redirect behavior for the `X-Api-Key` header. Choosing a custom API endpoint requires administrator privileges, so this review does not claim an unauthenticated SSRF or credential-theft finding.
+- The updater trusts the HTTPS metadata service and its download URL. Signed release artifacts and download-origin validation would reduce supply-chain trust, but compromise of that trusted service was not demonstrated.
+
+### Suggested pull request description
+
+**Title:** Authenticate DGateway webhooks and harden payment status and shortcode handling
+
+Forged webhook requests previously reached WooCommerce payment completion and subscription hooks without validating the sender. Require the documented raw-body HMAC signature and expose the app webhook secret in administrator settings. Reject malformed payloads before side effects.
+
+Escape shortcode currency at the modal HTML sink, reject executable success URL schemes, limit public verification responses to reference/status, and prevent failure notifications from downgrading paid orders. Enforce the existing REST nonce requirement and include it in subscription requests. Escape connection-test messages in the admin UI.
+
+Merchants must configure the matching DGateway app webhook secret after upgrading; previously generated local secrets may not match. Public polling clients receive a reduced response schema. Includes standalone PHP/Node security regressions and staging validation instructions. No version bump, commit, remote push, or PR submission is included in this working-tree patch.

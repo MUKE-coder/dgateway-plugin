@@ -96,7 +96,8 @@ function dgw_activate() {
     add_option('dgw_api_url', 'https://dgatewayapi.desispay.com');
     add_option('dgw_api_key', '');
     add_option('dgw_default_currency', 'UGX');
-    add_option('dgw_webhook_secret', wp_generate_password(32, false));
+    // Must match the app's webhook secret from the DGateway dashboard.
+    add_option('dgw_webhook_secret', '');
 }
 register_activation_hook(__FILE__, 'dgw_activate');
 

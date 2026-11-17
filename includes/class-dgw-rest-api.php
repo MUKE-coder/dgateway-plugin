@@ -89,9 +89,9 @@ class DGW_REST_API {
     /* ------------------------------------------------------------------ */
 
     public function verify(\WP_REST_Request $request) {
-        $reference = sanitize_text_field($request->get_param('reference'));
+        $reference = $request->get_param('reference');
 
-        if (empty($reference)) {
+        if (!is_string($reference) || $reference === '' || strlen($reference) > 255) {
             return new \WP_Error('validation_error', 'Reference is required', ['status' => 400]);
         }
 
@@ -109,11 +109,19 @@ class DGW_REST_API {
 
         // Sync status to WooCommerce order if applicable.
         $status = $result['data']['status'] ?? '';
+        if (!is_string($status) || !in_array($status, ['pending', 'processing', 'completed', 'failed'], true)) {
+            $status = 'pending';
+        }
         if (($status === 'completed' || $status === 'failed') && class_exists('WooCommerce')) {
             $this->sync_wc_order_status($reference, $status);
         }
 
-        return new \WP_REST_Response($result, 200);
+        // This is a public polling endpoint. Never expose the merchant API's
+        // transaction details, customer data, metadata, or provider secrets.
+        return new \WP_REST_Response(['data' => [
+            'reference' => $reference,
+            'status'    => $status,
+        ]], 200);
     }
 
     /**
@@ -131,13 +139,17 @@ class DGW_REST_API {
         }
 
         $order = $orders[0];
+        if ($order->get_payment_method() !== 'dgateway') {
+            return;
+        }
 
         if ($status === 'completed' && !$order->is_paid()) {
             $order->payment_complete($reference);
             $order->add_order_note(
                 sprintf(__('DGateway payment confirmed via status check. Reference: %s', 'dgateway'), $reference)
             );
-        } elseif ($status === 'failed' && $order->get_status() !== 'failed') {
+        } elseif ($status === 'failed' && !$order->is_paid() && !$order->get_date_paid()
+            && $order->has_status(['pending', 'on-hold'])) {
             $order->update_status('failed',
                 sprintf(__('DGateway payment failed. Reference: %s', 'dgateway'), $reference)
             );
@@ -198,6 +210,8 @@ class DGW_REST_API {
         if ($nonce && wp_verify_nonce($nonce, 'wp_rest')) {
             return true;
         }
-        return true; // Allow public access (shortcodes on public pages). Security via rate limiting.
+        // Guest nonces provide CSRF friction only, not authorization or
+        // protection against automated abuse. Public shortcodes issue them.
+        return new \WP_Error('rest_forbidden', 'Invalid or missing nonce.', ['status' => 403]);
     }
 }
