@@ -18,12 +18,34 @@ class DGW_Webhook_Handler {
      * @return WP_REST_Response
      */
     public function handle(\WP_REST_Request $request) {
+        // Authenticate the exact bytes sent by DGateway before parsing or
+        // dispatching either payment or subscription events.
+        $secret = get_option('dgw_webhook_secret', '');
+        if (!is_string($secret) || $secret === '') {
+            return new \WP_REST_Response(['error' => ['code' => 'webhook_not_configured']], 503);
+        }
+
+        $signature = $request->get_header('X-DGateway-Signature');
+        if (!is_string($signature) || !preg_match('/\A[0-9a-f]{64}\z/', $signature)
+            || !hash_equals(hash_hmac('sha256', $request->get_body(), $secret), $signature)) {
+            return new \WP_REST_Response(['error' => ['code' => 'invalid_signature']], 401);
+        }
+
         $body = $request->get_json_params();
+        if (!is_array($body)) {
+            return new \WP_REST_Response(['error' => ['code' => 'invalid_payload']], 400);
+        }
 
         // Handle subscription webhook events.
         $event = $body['event'] ?? '';
+        if (!is_string($event)) {
+            return new \WP_REST_Response(['error' => ['code' => 'invalid_payload']], 400);
+        }
         if ($event && strpos($event, 'subscription.') === 0) {
             $subscription = $body['subscription'] ?? [];
+            if (!is_array($subscription)) {
+                return new \WP_REST_Response(['error' => ['code' => 'invalid_payload']], 400);
+            }
             do_action('dgw_subscription_webhook', $event, $subscription, $body);
             $this->log('info', "Subscription webhook: event={$event}");
             return new \WP_REST_Response(['status' => 'received'], 200);
@@ -31,6 +53,10 @@ class DGW_Webhook_Handler {
 
         $reference = $body['reference'] ?? '';
         $status    = $body['status'] ?? '';
+
+        if (!is_string($reference) || !is_string($status)) {
+            return new \WP_REST_Response(['error' => ['code' => 'invalid_payload']], 400);
+        }
 
         if (empty($reference) || empty($status)) {
             return new \WP_REST_Response(['status' => 'ignored', 'reason' => 'missing reference or status'], 200);
@@ -65,6 +91,9 @@ class DGW_Webhook_Handler {
         }
 
         $order = $orders[0];
+        if ($order->get_payment_method() !== 'dgateway') {
+            return;
+        }
 
         switch ($status) {
             case 'completed':
@@ -78,7 +107,8 @@ class DGW_Webhook_Handler {
                 break;
 
             case 'failed':
-                if ($order->get_status() !== 'failed') {
+                if (!$order->is_paid() && !$order->get_date_paid()
+                    && $order->has_status(['pending', 'on-hold'])) {
                     $order->update_status('failed',
                         sprintf(__('DGateway payment failed. Reference: %s', 'dgateway'), $reference)
                     );

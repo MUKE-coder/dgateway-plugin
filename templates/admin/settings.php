@@ -64,6 +64,18 @@
             </tr>
 
             <tr>
+                <th scope="row"><label for="dgw_webhook_secret"><?php esc_html_e('Webhook Secret', 'dgateway'); ?></label></th>
+                <td>
+                    <input type="password" id="dgw_webhook_secret" name="dgw_webhook_secret"
+                           value="<?php echo esc_attr(get_option('dgw_webhook_secret', '')); ?>"
+                           class="regular-text" autocomplete="new-password" />
+                    <p class="description">
+                        <?php esc_html_e('Copy your app webhook secret from the DGateway dashboard. It must match exactly. Unsigned webhooks and signatures made with a different secret are rejected. After upgrading, replace any previously generated local secret with the app secret.', 'dgateway'); ?>
+                    </p>
+                </td>
+            </tr>
+
+            <tr>
                 <th scope="row"><?php esc_html_e('Mode', 'dgateway'); ?></th>
                 <td>
                     <?php
